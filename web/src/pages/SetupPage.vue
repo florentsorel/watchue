@@ -75,9 +75,7 @@ import { useRouter } from "vue-router"
 import AppIcon from "@/components/AppIcon.vue"
 import { useSetupStore } from "@/stores/useSetupStore"
 
-// hueBridgeHost/configured are already populated by the router guard's
-// checkStatus() call before this page ever mounts (see main.ts) — the guard
-// is also what keeps an already-configured session from reaching /setup.
+// hueBridgeHost/configured are populated by the router guard's checkStatus() call (see main.ts).
 const router = useRouter()
 const setupStore = useSetupStore()
 
@@ -87,6 +85,7 @@ async function onStartPairing(): Promise<void> {
 
 async function onNext(): Promise<void> {
   await setupStore.waitForRestart()
-  router.replace("/")
+  // Notification provider setup is a separate, always-revisitable page.
+  router.replace("/provider")
 }
 </script>

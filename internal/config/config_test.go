@@ -53,6 +53,22 @@ func TestLoad_Validation(t *testing.T) {
 			},
 			wantErr: "TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID",
 		},
+		{
+			name: "discord alone is fine",
+			env: map[string]string{
+				"HUE_BRIDGE_HOST": "192.168.1.10", "HUE_APP_KEY": "key",
+				"DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/1/abc",
+			},
+		},
+		{
+			name: "telegram and discord both set",
+			env: map[string]string{
+				"HUE_BRIDGE_HOST": "192.168.1.10", "HUE_APP_KEY": "key",
+				"TELEGRAM_BOT_TOKEN": "bot-token", "TELEGRAM_CHAT_ID": "chat-id",
+				"DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/1/abc",
+			},
+			wantErr: "only one notification provider may be active",
+		},
 	}
 
 	for _, tt := range tests {

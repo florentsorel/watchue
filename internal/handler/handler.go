@@ -27,19 +27,50 @@ type HueClient interface {
 // one operation and no other bridge-authenticated calls involved.
 type PairFunc func(ctx context.Context, bridgeAddr string) (string, error)
 
-type Handler struct {
-	hue          HueClient
-	db           *db.Queries
-	cfg          *config.Config
-	hub          *stream.Hub
-	bridgeOnline *atomic.Bool
-	version      string
-	stop         context.CancelFunc
-	pair         PairFunc
+// Notifier sends a resource state-change notification through some external
+// channel. Implemented by internal/telegram.Client and internal/discord.Client.
+type Notifier interface {
+	Send(ctx context.Context, resourceName string, on bool) error
+	SendTest(ctx context.Context) error
 }
 
-func New(hueClient HueClient, queries *db.Queries, cfg *config.Config, hub *stream.Hub, bridgeOnline *atomic.Bool, version string, stop context.CancelFunc, pair PairFunc) *Handler {
-	return &Handler{hue: hueClient, db: queries, cfg: cfg, hub: hub, bridgeOnline: bridgeOnline, version: version, stop: stop, pair: pair}
+// NotifyConfig is a request-bind target ONLY — never return it in a JSON response.
+type NotifyConfig struct {
+	Provider          string `json:"provider"`
+	TelegramBotToken  string `json:"telegram_bot_token,omitempty"`
+	TelegramChatID    string `json:"telegram_chat_id,omitempty"`
+	DiscordWebhookURL string `json:"discord_webhook_url,omitempty"`
+}
+
+// NotifierFactory builds a Notifier for the given provider/credentials.
+type NotifierFactory func(NotifyConfig) (Notifier, error)
+
+type Handler struct {
+	hue             HueClient
+	db              *db.Queries
+	cfg             *config.Config
+	hub             *stream.Hub
+	bridgeOnline    *atomic.Bool
+	version         string
+	stop            context.CancelFunc
+	pair            PairFunc
+	notifierFactory NotifierFactory
+	notifierStore   *NotifierStore
+}
+
+func New(hueClient HueClient, queries *db.Queries, cfg *config.Config, hub *stream.Hub, bridgeOnline *atomic.Bool, version string, stop context.CancelFunc, pair PairFunc, notifierFactory NotifierFactory, notifierStore *NotifierStore) *Handler {
+	return &Handler{
+		hue:             hueClient,
+		db:              queries,
+		cfg:             cfg,
+		hub:             hub,
+		bridgeOnline:    bridgeOnline,
+		version:         version,
+		stop:            stop,
+		pair:            pair,
+		notifierFactory: notifierFactory,
+		notifierStore:   notifierStore,
+	}
 }
 
 type errorResponse struct {
@@ -60,4 +91,11 @@ func jsonInternalError(c *echo.Context, err error) error {
 func jsonBridgeError(c *echo.Context, err error) error {
 	slog.Error("failed to reach the Hue bridge", "error", err, "path", c.Request().URL.Path)
 	return jsonError(c, http.StatusBadGateway, "failed to reach the Hue bridge")
+}
+
+// jsonProviderError reports a failure to reach a notification provider
+// (Telegram/Discord) specifically.
+func jsonProviderError(c *echo.Context, err error) error {
+	slog.Error("failed to reach the notification provider", "error", err, "path", c.Request().URL.Path)
+	return jsonError(c, http.StatusBadGateway, "failed to reach the notification provider")
 }

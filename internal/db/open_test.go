@@ -180,7 +180,7 @@ func TestBoolSetting(t *testing.T) {
 	ctx := context.Background()
 
 	// never set: falls back to the given default
-	got, err := q.GetBoolSetting(ctx, db.TelegramEnabledKey, true)
+	got, err := q.GetBoolSetting(ctx, db.NotifyEnabledKey, true)
 	if err != nil {
 		t.Fatalf("GetBoolSetting: %v", err)
 	}
@@ -188,10 +188,10 @@ func TestBoolSetting(t *testing.T) {
 		t.Error("GetBoolSetting = false, want the default (true) when unset")
 	}
 
-	if err := q.SetBoolSetting(ctx, db.TelegramEnabledKey, false); err != nil {
+	if err := q.SetBoolSetting(ctx, db.NotifyEnabledKey, false); err != nil {
 		t.Fatalf("SetBoolSetting: %v", err)
 	}
-	got, err = q.GetBoolSetting(ctx, db.TelegramEnabledKey, true)
+	got, err = q.GetBoolSetting(ctx, db.NotifyEnabledKey, true)
 	if err != nil {
 		t.Fatalf("GetBoolSetting: %v", err)
 	}
@@ -200,10 +200,10 @@ func TestBoolSetting(t *testing.T) {
 	}
 
 	// setting again (not just inserting) updates in place
-	if err := q.SetBoolSetting(ctx, db.TelegramEnabledKey, true); err != nil {
+	if err := q.SetBoolSetting(ctx, db.NotifyEnabledKey, true); err != nil {
 		t.Fatalf("SetBoolSetting (update): %v", err)
 	}
-	got, err = q.GetBoolSetting(ctx, db.TelegramEnabledKey, false)
+	got, err = q.GetBoolSetting(ctx, db.NotifyEnabledKey, false)
 	if err != nil {
 		t.Fatalf("GetBoolSetting: %v", err)
 	}

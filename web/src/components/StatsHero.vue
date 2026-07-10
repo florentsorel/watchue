@@ -36,7 +36,7 @@
         {{ changesToday.length }}
       </div>
       <div class="mt-2 text-xs text-wq-faint">
-        <span class="font-semibold text-wq-accent-2">{{ sentCount }} sent</span> to Telegram ·
+        <span class="font-semibold text-wq-accent-2">{{ sentCount }} sent</span> ·
         {{ suppressedCount }} muted
       </div>
     </div>
@@ -48,13 +48,13 @@
       </div>
       <div
         class="mt-5 text-wq-26 font-extrabold"
-        :class="settingsStore.telegramEnabled ? 'text-wq-tg' : 'text-wq-faint'"
+        :class="settingsStore.notifyEnabled ? providerTextClass : 'text-wq-faint'"
       >
-        {{ settingsStore.telegramEnabled ? "Enabled" : "Paused" }}
+        {{ settingsStore.notifyEnabled ? "Enabled" : "Paused" }}
       </div>
       <div class="mt-2 text-xs text-wq-faint">
         {{
-          settingsStore.telegramEnabled
+          settingsStore.notifyEnabled
             ? "Watched changes ping your chat instantly."
             : "Recording continues — no messages are sent."
         }}
@@ -92,4 +92,7 @@ const changesToday = computed(() =>
 )
 const sentCount = computed(() => changesToday.value.filter((e) => e.outcome === "sent").length)
 const suppressedCount = computed(() => changesToday.value.length - sentCount.value)
+const providerTextClass = computed(() =>
+  settingsStore.notifyProvider === "discord" ? "text-wq-discord" : "text-wq-tg"
+)
 </script>

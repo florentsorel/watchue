@@ -15,6 +15,9 @@
   --wq-good-soft: rgb(58 166 106 / 12%);
   --wq-tg: #2aabee;
   --wq-tg-soft: color-mix(in srgb, #2aabee 13%, transparent);
+  --wq-discord: #5865f2;
+  --wq-discord-soft: color-mix(in srgb, #5865f2 13%, transparent);
+  --wq-info: #3b82f6;
 }
 
 .dark {
@@ -26,10 +29,11 @@
   --wq-text: #eef1f4;
   --wq-muted: #98a1ad;
   --wq-faint: #5c6470;
-  --wq-accent: #fbbf24;
-  --wq-accent-2: #f59e0b;
+  --wq-accent: #ca8a04;
+  --wq-accent-2: #d97706;
   --wq-good: #4cc987;
   --wq-good-soft: rgb(76 201 135 / 14%);
+  --wq-info: #60a5fa;
 }
 
 /* Registered via @theme so Tailwind generates utilities (bg-wq-panel,
@@ -47,7 +51,9 @@
   --color-wq-accent: var(--wq-accent);
   --color-wq-accent-2: var(--wq-accent-2);
   --color-wq-good: var(--wq-good);
+  --color-wq-info: var(--wq-info);
   --color-wq-tg: var(--wq-tg);
+  --color-wq-discord: var(--wq-discord);
 
   /* Pixel-perfect values translated from the design mockup — named instead of
      inline arbitrary values so the scale is greppable and reusable. Every
@@ -98,6 +104,7 @@
 
   --shadow-wq-logo: 0 6px 18px -6px var(--wq-accent);
   --shadow-wq-telegram: 0 8px 20px -8px var(--wq-tg);
+  --shadow-wq-discord: 0 8px 20px -8px var(--wq-discord);
   --shadow-wq-status-ring: 0 0 0 3px var(--wq-good-soft);
 
   --grid-template-columns-wq-stats: 1.5fr 1fr 1fr;
