@@ -19,9 +19,8 @@ func TestLoad_Validation(t *testing.T) {
 			wantErr: "HUE_BRIDGE_HOST",
 		},
 		{
-			name:    "missing app key",
-			env:     map[string]string{"HUE_BRIDGE_HOST": "192.168.1.10"},
-			wantErr: "HUE_APP_KEY",
+			name: "app key not set is fine (resolved via /setup at runtime)",
+			env:  map[string]string{"HUE_BRIDGE_HOST": "192.168.1.10"},
 		},
 		{
 			name: "both set",

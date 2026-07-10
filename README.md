@@ -60,7 +60,6 @@ services:
     environment:
       DB_PATH: /data/watchue.db
       HUE_BRIDGE_HOST: 192.168.1.x
-      HUE_APP_KEY: your-hue-app-key
       TELEGRAM_BOT_TOKEN: your-telegram-bot-token
       TELEGRAM_CHAT_ID: your-telegram-chat-id
     restart: unless-stopped
@@ -72,7 +71,8 @@ Then:
 docker compose up -d
 ```
 
-Open [http://localhost:8080](http://localhost:8080) in your browser.
+Open [http://localhost:8080](http://localhost:8080) in your browser — with no `HUE_APP_KEY` set, Watchue
+redirects you to a `/setup` page that pairs with your bridge for you (see below).
 
 > **Pinning a version** — replace `:latest` with a specific release tag (e.g.
 > `ghcr.io/florentsorel/watchue:1.2.3`) to avoid unexpected changes on container restart.
@@ -87,7 +87,7 @@ Open [http://localhost:8080](http://localhost:8080) in your browser.
 |---|---|---|
 | `DB_PATH` | No | Path to the SQLite database file (default: `data/watchue.db`) |
 | `HUE_BRIDGE_HOST` | Yes | IP or hostname of your Philips Hue Bridge (e.g. `192.168.1.10`) |
-| `HUE_APP_KEY` | Yes | Bridge application key — see below for how to obtain one |
+| `HUE_APP_KEY` | No | Bridge application key — leave unset and pair via `/setup` instead (see below) |
 | `TELEGRAM_BOT_TOKEN` | No | Telegram bot token — required if `TELEGRAM_CHAT_ID` is set |
 | `TELEGRAM_CHAT_ID` | No | Telegram chat id to notify — required if `TELEGRAM_BOT_TOKEN` is set |
 
@@ -96,7 +96,19 @@ history, it just won't send notifications.
 
 ### Getting a Hue Bridge app key
 
-The Hue Bridge only hands out an application key after a physical button press:
+The Hue Bridge only hands out an application key after a physical button press. The easiest way
+to get one is the in-app setup flow:
+
+1. Leave `HUE_APP_KEY` unset and start Watchue — it redirects to `/setup`.
+2. Press the physical link button on your Hue Bridge, then click **Start pairing**. Watchue polls
+   the bridge and detects the press automatically.
+3. Click **Next**. Watchue stores the key and restarts itself to pick it up — this relies on your
+   process supervisor restarting a cleanly-exited process, true for the `restart: unless-stopped`
+   policy in the Compose file above. If you're running the binary directly (e.g. under `go run`
+   or a bare `systemd` unit without `Restart=always`), restart it manually after this step.
+
+If you'd rather obtain the key yourself (e.g. to set `HUE_APP_KEY` directly, scripting a headless
+setup, or without ever visiting `/setup`), call the bridge's pairing endpoint by hand instead:
 
 1. Press the physical link button on your Hue Bridge.
 2. Within 30 seconds, call the bridge's pairing endpoint:

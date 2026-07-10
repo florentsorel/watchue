@@ -121,12 +121,17 @@ for the frontend:
   decision above), `GET /api/events`, `GET /api/settings` + `PUT /api/settings/telegram-enabled`
   (`GetSettings` also returns `telegram_configured`/`hue_bridge_host` — non-secret config status
   the web app's Settings page shows; never the bot token/chat id themselves), `GET /api/stream`
-  (SSE — see real-time decision above).
+  (SSE — see real-time decision above), `GET /api/setup/status` + `POST /api/setup/pair` (the
+  bridge-pairing flow — see the `HUE_APP_KEY`/pairing note above; `PostSetupPair` never returns the
+  key itself, same discipline as `GetSettings`).
   `GetZones`/`GetRooms` use the `HueClient`-interface + mock pattern (mirroring `postr`'s
   `PlexClient`); the DB-backed handlers instead hold a concrete `*db.Queries` (plus `*config.Config`
   for the non-secret status fields, same as `postr`'s `Handler.config`, and `*stream.Hub` for
   `GetStream`) and are tested against a real `db.Open(":memory:")`, matching `postr`'s own
-  handler-test convention (mock the network dependency, use the real DB for SQL correctness).
+  handler-test convention (mock the network dependency, use the real DB for SQL correctness). The
+  setup endpoints instead take a `PairFunc` (a plain function type, not an interface — there's only
+  one operation) and a `context.CancelFunc` (`stop`), both stubbable in tests without any real HTTP
+  call to a bridge.
 - `internal/watch` — matches eventstream data against `watched_resources` (see event matching
   note above). `ResolveResourceID` (the id-resolution half of `Match`, without the DB lookup) is
   exported and reused by `cmd/web` to broadcast raw resource updates for *unwatched* resources too.
@@ -183,9 +188,10 @@ for the frontend:
     matching `postr`'s convention exactly (no `api/`/`client.ts`, no shared response DTOs — each
     store declares the small interface it needs).
   - `src/components/` flat (not nested by feature), `src/pages/` for route-level components
-    (currently just `DashboardPage.vue` — everything is one continuous page, no router-worthy
-    second route yet), routes declared inline in `main.ts` (no `router/` folder) — all matching
-    `postr`.
+    (`DashboardPage.vue` and `SetupPage.vue`), routes declared inline in `main.ts` (no `router/`
+    folder) — matching `postr`. `main.ts` also holds a `router.beforeEach` guard (the one place
+    routing logic lives beyond the route table itself) redirecting between `/` and `/setup` based
+    on `useSetupStore`'s configured status, checked once per session.
   - Custom icon set (`IconSprite.vue` + `AppIcon.vue`, `<use href="#i-name">`) instead of an
     Iconify/Nuxt UI `Icon` set: the mockup's icons (room types, zone, bulb/lightstrip/spot, etc.)
     are hand-drawn and not in a standard set.
@@ -244,6 +250,22 @@ including Telegram credentials (`internal/config`), SQLite/goose/sqlc (`internal
 records every watched change to `events` (with a fixed `outcome`) and sends a Telegram message
 unless muted, channel-disabled, or unconfigured.
 
+`HUE_APP_KEY` is now optional at the env layer (`internal/config`'s `validate()` no longer
+requires it) — `cmd/web` resolves the effective key from the env var first, falling back to a
+`hue_app_key` row in `settings` (`db.HueAppKeyKey`) obtained via a guided in-app pairing flow:
+`GET /api/setup/status` / `POST /api/setup/pair` (`internal/handler/setup.go`) drive a `/setup`
+page (`SetupPage.vue` + `useSetupStore.ts`) that polls the bridge's unauthenticated link-button
+exchange (`internal/hue.Pair`, distinguishing "button not pressed yet" from a hard bridge error)
+until the user presses the physical button, stores the resulting key, then triggers a graceful
+restart via the same `context.CancelFunc` `main.go` already holds for `SIGTERM` — deliberately not
+a hot-reloaded `hue.Client`, since this is a one-time setup action. This relies on the process
+actually being restarted after a clean exit (true for the documented `restart: unless-stopped`
+Compose policy, not guaranteed for a bare `systemd` unit or `go run`) — a limitation surfaced as
+UI/README copy, not as an API contract, since the backend can't detect its own supervisor. The
+frontend router (`main.ts`) gates every route behind a `beforeEach` guard checking configured
+status once per session, redirecting `/ → /setup` and back. The old manual curl-based workaround
+is kept in the README as a documented fallback (headless/scripted setups).
+
 The web app (`web/`) has a working dashboard: live stats, watched-resources grid (3 layouts, mute/
 unwatch), browse zones/rooms with watch toggles (long lists cap at a fixed height and scroll —
 `ScrollableList.vue`, reused across panels via an `itemsDisplayed` prop), history with filters
@@ -260,8 +282,8 @@ spinner (`i-spinner`, `animate-spin`), not a skeleton placeholder. Favicon + `do
 mirror the header logo, now used in the root `README.md`. Verified end-to-end against the real
 compiled binary (fake bridge, real SQLite) — build/typecheck/lint/tests all green on both sides.
 Not yet built/verified: real interaction against a live Hue bridge + a real Telegram bot in a
-browser, the bridge pairing helper (a manual curl-based workaround is documented in the README),
-and any UI polish pass beyond the initial mockup translation.
+browser (including the new `/setup` pairing flow against a real bridge's physical button), and any
+UI polish pass beyond the initial mockup translation.
 
 Also since the last update: `cmd/web` no longer exits at startup if the bridge is unreachable
 (that fully defeated the point of live bridge-status tracking — an unreachable bridge should show

@@ -45,7 +45,8 @@ func newTestSetupWithBridgeOnline(t *testing.T, hueClient handler.HueClient, cfg
 	}
 	t.Cleanup(func() { conn.Close() })
 	queries := db.New(conn)
-	return handler.New(hueClient, queries, cfg, hub, bridgeOnline, "test"), queries
+	noopPair := func(ctx context.Context, bridgeAddr string) (string, error) { return "", nil }
+	return handler.New(hueClient, queries, cfg, hub, bridgeOnline, "test", func() {}, noopPair), queries
 }
 
 // newCtx creates an Echo context backed by a response recorder.

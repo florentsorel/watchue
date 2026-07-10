@@ -22,6 +22,11 @@ type HueClient interface {
 	GroupedLights(ctx context.Context) ([]hue.GroupedLight, error)
 }
 
+// PairFunc performs the bridge's link-button pairing exchange (see
+// hue.Pair). A function type rather than an interface since there's exactly
+// one operation and no other bridge-authenticated calls involved.
+type PairFunc func(ctx context.Context, bridgeAddr string) (string, error)
+
 type Handler struct {
 	hue          HueClient
 	db           *db.Queries
@@ -29,10 +34,12 @@ type Handler struct {
 	hub          *stream.Hub
 	bridgeOnline *atomic.Bool
 	version      string
+	stop         context.CancelFunc
+	pair         PairFunc
 }
 
-func New(hueClient HueClient, queries *db.Queries, cfg *config.Config, hub *stream.Hub, bridgeOnline *atomic.Bool, version string) *Handler {
-	return &Handler{hue: hueClient, db: queries, cfg: cfg, hub: hub, bridgeOnline: bridgeOnline, version: version}
+func New(hueClient HueClient, queries *db.Queries, cfg *config.Config, hub *stream.Hub, bridgeOnline *atomic.Bool, version string, stop context.CancelFunc, pair PairFunc) *Handler {
+	return &Handler{hue: hueClient, db: queries, cfg: cfg, hub: hub, bridgeOnline: bridgeOnline, version: version, stop: stop, pair: pair}
 }
 
 type errorResponse struct {
