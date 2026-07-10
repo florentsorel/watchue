@@ -25,6 +25,11 @@ type pairResp struct {
 
 func newSetupTestSetup(t *testing.T, cfg *config.Config, pair handler.PairFunc) (*handler.Handler, *db.Queries, *bool) {
 	t.Helper()
+	return newSetupTestSetupWithNotify(t, cfg, pair, nil)
+}
+
+func newSetupTestSetupWithNotify(t *testing.T, cfg *config.Config, pair handler.PairFunc, notifierFactory handler.NotifierFactory) (*handler.Handler, *db.Queries, *bool) {
+	t.Helper()
 	conn, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
@@ -33,7 +38,10 @@ func newSetupTestSetup(t *testing.T, cfg *config.Config, pair handler.PairFunc) 
 	queries := db.New(conn)
 	stopped := false
 	bridgeOnline := &atomic.Bool{}
-	h := handler.New(&mockHue{}, queries, cfg, stream.NewHub(), bridgeOnline, "test", func() { stopped = true }, pair)
+	if notifierFactory == nil {
+		notifierFactory = func(cfg handler.NotifyConfig) (handler.Notifier, error) { return &mockNotifier{}, nil }
+	}
+	h := handler.New(&mockHue{}, queries, cfg, stream.NewHub(), bridgeOnline, "test", func() { stopped = true }, pair, notifierFactory, handler.NewNotifierStore())
 	return h, queries, &stopped
 }
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 )
 
@@ -40,9 +41,25 @@ type apiResponse struct {
 	Description string `json:"description"`
 }
 
-// Send posts text as an HTML-formatted message (see Telegram's HTML message
-// style: https://core.telegram.org/bots/api#html-style) to the configured chat.
-func (c *Client) Send(ctx context.Context, text string) error {
+// Send notifies that resourceName was turned on or off, formatted as an
+// HTML message (see Telegram's HTML message style:
+// https://core.telegram.org/bots/api#html-style).
+func (c *Client) Send(ctx context.Context, resourceName string, on bool) error {
+	state := "off"
+	if on {
+		state = "on"
+	}
+	text := fmt.Sprintf("🔆 <b>%s</b> was turned <b>%s</b>.", html.EscapeString(resourceName), state)
+	return c.post(ctx, text)
+}
+
+// SendTest posts a fixed message, used by the /setup notification step to
+// confirm the bot token/chat id actually work before saving them.
+func (c *Client) SendTest(ctx context.Context) error {
+	return c.post(ctx, "✅ <b>Watchue</b> is connected and will notify you here.")
+}
+
+func (c *Client) post(ctx context.Context, text string) error {
 	body, err := json.Marshal(sendMessageRequest{ChatID: c.chatID, Text: text, ParseMode: "HTML"})
 	if err != nil {
 		return fmt.Errorf("telegram: encode request: %w", err)

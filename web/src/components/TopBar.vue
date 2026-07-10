@@ -26,22 +26,24 @@
       <div class="flex-1" />
 
       <div
+        v-if="settings.notifyProvider"
         class="hidden h-wq-34 items-center gap-wq-7 rounded-wq-9 border border-wq-border bg-wq-panel px-3 text-wq-12-5 font-semibold text-wq-muted sm:inline-flex"
       >
-        <AppIcon name="telegram" :size="16" />
-        {{ settings.telegramEnabled ? "Telegram on" : "Telegram off" }}
+        <ProviderIcon :provider="settings.notifyProvider" :size="16" />
+        {{ providerLabel }} {{ settings.notifyEnabled ? "on" : "off" }}
       </div>
 
       <button
+        v-if="settings.notifyProvider"
         type="button"
         class="relative h-6 w-wq-42 flex-none rounded-full transition-colors"
-        :class="settings.telegramEnabled ? 'bg-wq-tg' : 'bg-wq-faint/50'"
-        title="Toggle Telegram notifications"
-        @click="settings.setTelegramEnabled(!settings.telegramEnabled)"
+        :class="settings.notifyEnabled ? providerToggleClass : 'bg-wq-faint/50'"
+        title="Toggle notifications"
+        @click="settings.setNotifyEnabled(!settings.notifyEnabled)"
       >
         <span
           class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all"
-          :class="settings.telegramEnabled ? 'left-wq-20' : 'left-0.5'"
+          :class="settings.notifyEnabled ? 'left-wq-20' : 'left-0.5'"
         />
       </button>
 
@@ -58,10 +60,19 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue"
 import AppIcon from "@/components/AppIcon.vue"
+import ProviderIcon from "@/components/ProviderIcon.vue"
 import { useSettingsStore } from "@/stores/useSettingsStore"
 import { useUiStore } from "@/stores/useUiStore"
 
 const settings = useSettingsStore()
 const ui = useUiStore()
+
+const providerLabel = computed(() =>
+  settings.notifyProvider === "discord" ? "Discord" : "Telegram"
+)
+const providerToggleClass = computed(() =>
+  settings.notifyProvider === "discord" ? "bg-wq-discord" : "bg-wq-tg"
+)
 </script>

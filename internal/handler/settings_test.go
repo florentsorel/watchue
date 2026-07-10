@@ -11,11 +11,12 @@ import (
 )
 
 type settingsResp struct {
-	TelegramEnabled    bool   `json:"telegram_enabled"`
-	TelegramConfigured bool   `json:"telegram_configured"`
-	HueBridgeHost      string `json:"hue_bridge_host"`
-	BridgeOnline       bool   `json:"bridge_online"`
-	Version            string `json:"version"`
+	NotifyEnabled    bool   `json:"notify_enabled"`
+	NotifyConfigured bool   `json:"notify_configured"`
+	NotifyProvider   string `json:"notify_provider"`
+	HueBridgeHost    string `json:"hue_bridge_host"`
+	BridgeOnline     bool   `json:"bridge_online"`
+	Version          string `json:"version"`
 }
 
 func TestSettings_ExposesConfigStatusWithoutSecrets(t *testing.T) {
@@ -31,14 +32,37 @@ func TestSettings_ExposesConfigStatusWithoutSecrets(t *testing.T) {
 		t.Fatalf("GetSettings: %v", err)
 	}
 	got := decodeJSON[settingsResp](t, rec.Body.Bytes())
-	if !got.TelegramConfigured {
-		t.Error("TelegramConfigured = false, want true")
+	if !got.NotifyConfigured {
+		t.Error("NotifyConfigured = false, want true")
+	}
+	if got.NotifyProvider != "telegram" {
+		t.Errorf("NotifyProvider = %q, want %q", got.NotifyProvider, "telegram")
 	}
 	if got.HueBridgeHost != "192.168.1.10" {
 		t.Errorf("HueBridgeHost = %q, want %q", got.HueBridgeHost, "192.168.1.10")
 	}
 	if body := rec.Body.String(); strings.Contains(body, "secret-token") || strings.Contains(body, "secret-chat-id") {
 		t.Errorf("response leaked a secret: %s", body)
+	}
+}
+
+func TestSettings_ExposesDiscordProviderWithoutSecrets(t *testing.T) {
+	cfg := &config.Config{
+		HueBridgeHost:     "192.168.1.10",
+		DiscordWebhookURL: "https://discord.com/api/webhooks/1/secret-token",
+	}
+	h, _ := newTestSetupWithConfig(t, &mockHue{}, cfg)
+
+	rec, c := newCtx(t, http.MethodGet, "/api/settings", "")
+	if err := h.GetSettings(c); err != nil {
+		t.Fatalf("GetSettings: %v", err)
+	}
+	got := decodeJSON[settingsResp](t, rec.Body.Bytes())
+	if got.NotifyProvider != "discord" {
+		t.Errorf("NotifyProvider = %q, want %q", got.NotifyProvider, "discord")
+	}
+	if body := rec.Body.String(); strings.Contains(body, "secret-token") {
+		t.Errorf("response leaked the webhook URL: %s", body)
 	}
 }
 
@@ -88,17 +112,17 @@ func TestSettings_DefaultsToEnabled(t *testing.T) {
 		t.Fatalf("GetSettings: %v", err)
 	}
 	got := decodeJSON[settingsResp](t, rec.Body.Bytes())
-	if !got.TelegramEnabled {
-		t.Error("TelegramEnabled = false, want true (default) when never toggled")
+	if !got.NotifyEnabled {
+		t.Error("NotifyEnabled = false, want true (default) when never toggled")
 	}
 }
 
-func TestPutTelegramEnabled(t *testing.T) {
+func TestPutNotifyEnabled(t *testing.T) {
 	h, _ := newTestSetup(t, &mockHue{})
 
-	rec, c := newCtx(t, http.MethodPut, "/api/settings/telegram-enabled", `{"enabled":false}`)
-	if err := h.PutTelegramEnabled(c); err != nil {
-		t.Fatalf("PutTelegramEnabled: %v", err)
+	rec, c := newCtx(t, http.MethodPut, "/api/settings/notify-enabled", `{"enabled":false}`)
+	if err := h.PutNotifyEnabled(c); err != nil {
+		t.Fatalf("PutNotifyEnabled: %v", err)
 	}
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusNoContent)
@@ -109,31 +133,31 @@ func TestPutTelegramEnabled(t *testing.T) {
 		t.Fatalf("GetSettings: %v", err)
 	}
 	got := decodeJSON[settingsResp](t, rec.Body.Bytes())
-	if got.TelegramEnabled {
-		t.Error("TelegramEnabled = true, want false after disabling")
+	if got.NotifyEnabled {
+		t.Error("NotifyEnabled = true, want false after disabling")
 	}
 
-	_, c = newCtx(t, http.MethodPut, "/api/settings/telegram-enabled", `{"enabled":true}`)
-	if err := h.PutTelegramEnabled(c); err != nil {
-		t.Fatalf("PutTelegramEnabled (re-enable): %v", err)
+	_, c = newCtx(t, http.MethodPut, "/api/settings/notify-enabled", `{"enabled":true}`)
+	if err := h.PutNotifyEnabled(c); err != nil {
+		t.Fatalf("PutNotifyEnabled (re-enable): %v", err)
 	}
 	rec, c = newCtx(t, http.MethodGet, "/api/settings", "")
 	if err := h.GetSettings(c); err != nil {
 		t.Fatalf("GetSettings: %v", err)
 	}
 	got = decodeJSON[settingsResp](t, rec.Body.Bytes())
-	if !got.TelegramEnabled {
-		t.Error("TelegramEnabled = false, want true after re-enabling")
+	if !got.NotifyEnabled {
+		t.Error("NotifyEnabled = false, want true after re-enabling")
 	}
 }
 
-func TestPutTelegramEnabled_InvalidRequest(t *testing.T) {
+func TestPutNotifyEnabled_InvalidRequest(t *testing.T) {
 	h, _ := newTestSetup(t, &mockHue{})
 
 	t.Run("missing enabled field", func(t *testing.T) {
-		rec, c := newCtx(t, http.MethodPut, "/api/settings/telegram-enabled", `{}`)
-		if err := h.PutTelegramEnabled(c); err != nil {
-			t.Fatalf("PutTelegramEnabled: %v", err)
+		rec, c := newCtx(t, http.MethodPut, "/api/settings/notify-enabled", `{}`)
+		if err := h.PutNotifyEnabled(c); err != nil {
+			t.Fatalf("PutNotifyEnabled: %v", err)
 		}
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
@@ -141,9 +165,9 @@ func TestPutTelegramEnabled_InvalidRequest(t *testing.T) {
 	})
 
 	t.Run("invalid body", func(t *testing.T) {
-		rec, c := newCtx(t, http.MethodPut, "/api/settings/telegram-enabled", `not json`)
-		if err := h.PutTelegramEnabled(c); err != nil {
-			t.Fatalf("PutTelegramEnabled: %v", err)
+		rec, c := newCtx(t, http.MethodPut, "/api/settings/notify-enabled", `not json`)
+		if err := h.PutNotifyEnabled(c); err != nil {
+			t.Fatalf("PutNotifyEnabled: %v", err)
 		}
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)

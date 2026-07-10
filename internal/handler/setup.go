@@ -15,10 +15,7 @@ type setupStatusResponse struct {
 	HueBridgeHost string `json:"hue_bridge_host"`
 }
 
-// GetSetupStatus reports whether a Hue app key is available (env or DB), so
-// the web app knows whether to show the dashboard or the /setup flow. Always
-// a live check, never cached: pairing can complete mid-poll within the same
-// process.
+// GetSetupStatus reports whether a Hue app key is available (env or DB). Always a live check.
 func (h *Handler) GetSetupStatus(c *echo.Context) error {
 	configured, err := h.hasAppKey(c)
 	if err != nil {
@@ -35,11 +32,8 @@ type pairResponse struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-// PostSetupPair attempts one pairing exchange against HUE_BRIDGE_HOST. On
-// success, it stores the app key under db.HueAppKeyKey and triggers a
-// graceful restart (h.stop) so cmd/web picks up the new key on the next
-// boot — see the pairing-setup design notes for why this doesn't hot-reload
-// the Hue client in place.
+// PostSetupPair attempts one pairing exchange, stores the resulting app key,
+// and triggers a graceful restart so cmd/web picks it up on the next boot.
 func (h *Handler) PostSetupPair(c *echo.Context) error {
 	ctx := c.Request().Context()
 

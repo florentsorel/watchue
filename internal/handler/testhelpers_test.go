@@ -46,7 +46,8 @@ func newTestSetupWithBridgeOnline(t *testing.T, hueClient handler.HueClient, cfg
 	t.Cleanup(func() { conn.Close() })
 	queries := db.New(conn)
 	noopPair := func(ctx context.Context, bridgeAddr string) (string, error) { return "", nil }
-	return handler.New(hueClient, queries, cfg, hub, bridgeOnline, "test", func() {}, noopPair), queries
+	noopFactory := func(cfg handler.NotifyConfig) (handler.Notifier, error) { return &mockNotifier{}, nil }
+	return handler.New(hueClient, queries, cfg, hub, bridgeOnline, "test", func() {}, noopPair, noopFactory, handler.NewNotifierStore()), queries
 }
 
 // newCtx creates an Echo context backed by a response recorder.
@@ -108,3 +109,23 @@ func (m *mockHue) GroupedLights(ctx context.Context) ([]hue.GroupedLight, error)
 }
 
 var _ handler.HueClient = (*mockHue)(nil)
+
+// mockNotifier is a configurable handler.Notifier for tests.
+type mockNotifier struct {
+	sendErr     error
+	sendTestErr error
+	sendCalls   int
+	testCalls   int
+}
+
+func (m *mockNotifier) Send(ctx context.Context, resourceName string, on bool) error {
+	m.sendCalls++
+	return m.sendErr
+}
+
+func (m *mockNotifier) SendTest(ctx context.Context) error {
+	m.testCalls++
+	return m.sendTestErr
+}
+
+var _ handler.Notifier = (*mockNotifier)(nil)

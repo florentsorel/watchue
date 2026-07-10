@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/florentsorel/watchue/internal/config"
 	"github.com/florentsorel/watchue/internal/db"
+	"github.com/florentsorel/watchue/internal/discord"
 	"github.com/florentsorel/watchue/internal/handler"
 	"github.com/florentsorel/watchue/internal/hue"
 	"github.com/florentsorel/watchue/internal/stream"
@@ -74,25 +74,39 @@ func main() {
 		bridgeOnline.Store(true)
 	}
 
-	var notifier *telegram.Client
-	if cfg.TelegramBotToken != "" {
-		notifier = telegram.NewClient(cfg.TelegramBotToken, cfg.TelegramChatID, nil)
-		slog.Info("telegram notifications configured")
+	notifyCfg, err := resolveNotifyConfig(ctx, cfg, queries)
+	if err != nil {
+		slog.Error("failed to resolve notification provider config", "error", err)
+		os.Exit(1)
+	}
+	notifierStore := handler.NewNotifierStore()
+	if notifyCfg.Provider != "" {
+		n, err := buildNotifier(notifyCfg)
+		if err != nil {
+			slog.Error("failed to build configured notifier", "provider", notifyCfg.Provider, "error", err)
+			os.Exit(1)
+		}
+		notifierStore.Set(n)
+		slog.Info("notifications configured", "provider", notifyCfg.Provider)
 	} else {
-		slog.Warn("TELEGRAM_BOT_TOKEN not set — watched changes will be recorded but never sent")
+		slog.Warn("no notification provider configured — watched changes will be recorded but never sent")
 	}
 
 	hub := stream.NewHub()
 
 	if configured {
-		go runEventLoop(ctx, client, queries, notifier, hub, bridgeOnline)
+		go runEventLoop(ctx, client, queries, notifierStore, hub, bridgeOnline)
 	}
 
 	e := echo.New()
 	pair := func(ctx context.Context, bridgeAddr string) (string, error) { return hue.Pair(ctx, bridgeAddr, nil) }
-	h := handler.New(client, queries, cfg, hub, bridgeOnline, version, stop, pair)
+	h := handler.New(client, queries, cfg, hub, bridgeOnline, version, stop, pair, buildNotifier, notifierStore)
 	e.GET("/api/setup/status", h.GetSetupStatus)
 	e.POST("/api/setup/pair", h.PostSetupPair)
+	e.GET("/api/notify", h.GetNotify)
+	e.POST("/api/notify/test", h.PostNotifyTest)
+	e.POST("/api/notify", h.PostNotify)
+	e.POST("/api/notify/activate", h.PostNotifyActivate)
 	e.GET("/api/zones", h.GetZones)
 	e.GET("/api/rooms", h.GetRooms)
 	e.GET("/api/watched", h.GetWatched)
@@ -101,7 +115,7 @@ func main() {
 	e.DELETE("/api/watched/:id", h.DeleteWatched)
 	e.GET("/api/events", h.GetEvents)
 	e.GET("/api/settings", h.GetSettings)
-	e.PUT("/api/settings/telegram-enabled", h.PutTelegramEnabled)
+	e.PUT("/api/settings/notify-enabled", h.PutNotifyEnabled)
 	e.GET("/api/stream", h.GetStream)
 	e.GET("/*", echo.WrapHandler(web.Handler()))
 
@@ -123,10 +137,68 @@ func main() {
 	}
 }
 
+// resolveNotifyConfig resolves the active provider's config from env, falling
+// back to whatever /provider stored in the DB. Provider is "" if neither is set.
+func resolveNotifyConfig(ctx context.Context, cfg *config.Config, queries *db.Queries) (handler.NotifyConfig, error) {
+	if cfg.TelegramBotToken != "" {
+		return handler.NotifyConfig{Provider: "telegram", TelegramBotToken: cfg.TelegramBotToken, TelegramChatID: cfg.TelegramChatID}, nil
+	}
+	if cfg.DiscordWebhookURL != "" {
+		return handler.NotifyConfig{Provider: "discord", DiscordWebhookURL: cfg.DiscordWebhookURL}, nil
+	}
+
+	provider, err := queries.GetSetting(ctx, db.NotifyProviderKey)
+	if errors.Is(err, sql.ErrNoRows) {
+		return handler.NotifyConfig{}, nil
+	}
+	if err != nil {
+		return handler.NotifyConfig{}, err
+	}
+
+	switch provider {
+	case "telegram":
+		botToken, err := queries.GetSetting(ctx, db.NotifyTelegramBotTokenKey)
+		if err != nil {
+			return handler.NotifyConfig{}, err
+		}
+		chatID, err := queries.GetSetting(ctx, db.NotifyTelegramChatIDKey)
+		if err != nil {
+			return handler.NotifyConfig{}, err
+		}
+		return handler.NotifyConfig{Provider: "telegram", TelegramBotToken: botToken, TelegramChatID: chatID}, nil
+	case "discord":
+		webhookURL, err := queries.GetSetting(ctx, db.NotifyDiscordWebhookURLKey)
+		if err != nil {
+			return handler.NotifyConfig{}, err
+		}
+		return handler.NotifyConfig{Provider: "discord", DiscordWebhookURL: webhookURL}, nil
+	default:
+		return handler.NotifyConfig{}, fmt.Errorf("unknown stored notify provider %q", provider)
+	}
+}
+
+// buildNotifier constructs a Notifier for cfg.Provider, validating required credentials.
+func buildNotifier(cfg handler.NotifyConfig) (handler.Notifier, error) {
+	switch cfg.Provider {
+	case "telegram":
+		if cfg.TelegramBotToken == "" || cfg.TelegramChatID == "" {
+			return nil, errors.New("telegram_bot_token and telegram_chat_id are required")
+		}
+		return telegram.NewClient(cfg.TelegramBotToken, cfg.TelegramChatID, nil), nil
+	case "discord":
+		if cfg.DiscordWebhookURL == "" {
+			return nil, errors.New("discord_webhook_url is required")
+		}
+		return discord.NewClient(cfg.DiscordWebhookURL, nil), nil
+	default:
+		return nil, fmt.Errorf("unknown provider %q", cfg.Provider)
+	}
+}
+
 // runEventLoop matches bridge events against watched resources, records
-// history, notifies via Telegram, and broadcasts real-time updates to any
-// connected web clients. notifier may be nil if unconfigured.
-func runEventLoop(ctx context.Context, client *hue.Client, queries *db.Queries, notifier *telegram.Client, hub *stream.Hub, bridgeOnline *atomic.Bool) {
+// history, notifies via the active provider (if any), and broadcasts
+// real-time updates to any connected web clients.
+func runEventLoop(ctx context.Context, client *hue.Client, queries *db.Queries, notifierStore *handler.NotifierStore, hub *stream.Hub, bridgeOnline *atomic.Bool) {
 	const maxBackoff = 30 * time.Second
 	backoff := time.Second
 
@@ -158,6 +230,7 @@ func runEventLoop(ctx context.Context, client *hue.Client, queries *db.Queries, 
 					onState = 1
 				}
 
+				notifier := notifierStore.Get()
 				outcome := "sent"
 				switch {
 				case notifier == nil:
@@ -165,9 +238,9 @@ func runEventLoop(ctx context.Context, client *hue.Client, queries *db.Queries, 
 				case !change.Notify:
 					outcome = "muted"
 				default:
-					enabled, err := queries.GetBoolSetting(ctx, db.TelegramEnabledKey, true)
+					enabled, err := queries.GetBoolSetting(ctx, db.NotifyEnabledKey, true)
 					if err != nil {
-						slog.Error("failed to read telegram_enabled setting", "error", err)
+						slog.Error("failed to read notify_enabled setting", "error", err)
 						outcome = "channel_off" // fail closed: don't send if we can't confirm it's enabled
 					} else if !enabled {
 						outcome = "channel_off"
@@ -193,13 +266,8 @@ func runEventLoop(ctx context.Context, client *hue.Client, queries *db.Queries, 
 					continue
 				}
 
-				state := "off"
-				if change.On {
-					state = "on"
-				}
-				message := fmt.Sprintf("🔆 <b>%s</b> was turned <b>%s</b>.", html.EscapeString(change.Name), state)
-				if err := notifier.Send(ctx, message); err != nil {
-					slog.Error("failed to send telegram notification", "id", change.ResourceID, "error", err)
+				if err := notifier.Send(ctx, change.Name, change.On); err != nil {
+					slog.Error("failed to send notification", "id", change.ResourceID, "error", err)
 				}
 			}
 			backoff = time.Second

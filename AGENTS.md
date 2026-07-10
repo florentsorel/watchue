@@ -5,9 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project
 
 Watchue detects when specific Philips Hue zones/rooms/lights are switched on or off, records the
-history, and sends a Telegram notification. A web app (Vue) lets the user browse zones/rooms,
-choose what to watch, mute notifications per resource, and review history. It is a personal/hobby
-project, not a public product.
+history, and sends a notification via Telegram or Discord (one active provider at a time). A web
+app (Vue) lets the user browse zones/rooms, choose what to watch, mute notifications per resource,
+and review history. It is a personal/hobby project, not a public product.
 
 ## Architecture
 
@@ -18,27 +18,44 @@ project, not a public product.
 [ Go backend, Docker container on an LXC host ]
         │  filters events against configured zones/rooms/lights, records history
         ▼
-[ Telegram Bot API ]                    [ Web app (Vue), served by the same backend ]
+[ Telegram Bot API /                    [ Web app (Vue), served by the same backend ]
+  Discord webhook ]
         ▼
-[ Telegram client — phone/desktop/web, no app to build ]
+[ Chat client — phone/desktop/web, no app to build ]
 ```
 
 Key decisions made for this architecture (don't relitigate without reason):
 
 - **Hue events**: Hue Bridge v2's CLIP API exposes events as Server-Sent Events. No SSE library is
   needed — plain `net/http` client streaming the response body is enough.
-- **Notification channel is Telegram**: needs no Firebase project, no OAuth2, no app to build at
-  all — Telegram already has clients everywhere.
-- **Channels are meant to be pluggable**: the user mentioned possibly adding Discord later. Don't
-  over-build a generic multi-channel abstraction preemptively for a single real channel (YAGNI) —
-  but keep `internal/telegram`'s shape (a small `Send(ctx, text) error` client) easy to replicate for
-  a second channel when/if that actually happens, rather than entangling Telegram specifics into
-  the event loop itself.
+- **Notification channels are Telegram and Discord, one active at a time**: both need no Firebase
+  project, no OAuth2, no app to build at all — a bot token/chat id pair or a single webhook URL is
+  enough. WhatsApp was considered and explicitly rejected: its Cloud API needs a Meta Business
+  account, phone verification, an expiring token, and pre-approved message templates for any
+  proactive (non-24h-window) message — disproportionate for a hobby project.
+- **Channels are pluggable via a `Notifier` interface**
+  (`internal/handler.Notifier`: `Send(ctx, resourceName string, on bool) error` +
+  `SendTest(ctx) error`) — deliberately takes structured data, not a pre-formatted string, so each
+  provider formats its own message (Telegram → HTML, Discord → Markdown) without entangling
+  provider-specific formatting into the shared event loop. `internal/telegram` and
+  `internal/discord` both implement it; adding a third provider means adding one more package plus
+  a `case` in `cmd/web`'s `buildNotifier`, nothing else changes.
+- **The active notifier is hot-swappable, not restart-based** — unlike the Hue `*hue.Client`
+  (tied to a long-lived SSE-subscription goroutine, hence restart-based reconfiguration, see
+  below), a `Notifier` makes only one-shot outbound calls. `internal/handler.NotifierStore` is a
+  small mutex-guarded container shared between the HTTP handler and the event loop; saving a new
+  provider via `POST /api/notify` takes effect on the very next event, no process restart. Because
+  of this, provider configuration is **not** part of the one-time bridge-pairing wizard: it's a
+  standalone, always-revisitable `/provider` page (reachable any time once the bridge is paired,
+  linked from both the post-pairing "Next" step and Settings' "Configure"/"Change" button) — no
+  forced one-time decision, no skip-flag bookkeeping, switching Telegram → Discord later is just
+  visiting the page again.
 - **Two independent on/off switches for notifications**: `watched_resources.notify` (per resource —
   "mute this specific zone/room/light, but keep recording its history") and the `settings` table's
-  `telegram_enabled` (global — "turn the whole channel off/on"). A muted resource's changes are
-  still recorded to `events`; only the send is skipped. See `internal/watch`'s `Change.Notify` and
-  `cmd/web`'s event loop.
+  `NotifyEnabledKey` (global — "turn the whole channel off/on"; on-disk key name is still
+  `telegram_enabled`, kept as-is to avoid a pointless data migration). A muted resource's changes
+  are still recorded to `events`; only the send is skipped. See `internal/watch`'s `Change.Notify`
+  and `cmd/web`'s event loop.
 - **Terminology matches the Hue CLIP v2 API**: `zone` and `room` are Hue's own resource type names
   (confirmed against Hue's API reference/docs) — don't rename these to "area": `area` is a distinct,
   newer Hue concept (Bridge Pro / MotionAware™ motion-sensing zones), unrelated to what we watch
@@ -75,8 +92,10 @@ Key decisions made for this architecture (don't relitigate without reason):
   not auto-discovered: this is a fixed home LXC service talking to one known bridge, not a client
   needing onboarding UX. The app-key (`HUE_APP_KEY`) requires a one-time physical bridge button
   press to obtain regardless of who performs the pairing call — not worth automating away yet.
-  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` are optional (Telegram simply stays unconfigured — events
-  still get recorded — if unset) but must be set together if used at all.
+  `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` and `DISCORD_WEBHOOK_URL` are optional (events still get
+  recorded if none are set) but the Telegram pair must be set together if used at all, and
+  `validate()` fails at boot if both providers are configured via env at once — only one may be
+  active, fail loud rather than silently pick a winner.
 - **Logging**: `log/slog` with `lmittmann/tint` for readable console output — same as `postr`.
 - **HTTP layer**: `echo/v5`, same as `postr`. Echo v5 dropped `Echo.Shutdown` — for graceful
   shutdown, wrap `e` in a plain `*http.Server{Handler: e}` and call the standard library's
@@ -124,31 +143,43 @@ for the frontend:
   requirement) whereas zone membership is a partial/optional subset.
 - `internal/handler` — Echo v5 HTTP handlers: `GET /api/zones`, `GET /api/rooms`,
   `GET|PUT|PATCH|DELETE /api/watched(/:id)` (`PATCH` toggles `notify` only — see the two-switches
-  decision above), `GET /api/events`, `GET /api/settings` + `PUT /api/settings/telegram-enabled`
-  (`GetSettings` also returns `telegram_configured`/`hue_bridge_host` — non-secret config status
-  the web app's Settings page shows; never the bot token/chat id themselves), `GET /api/stream`
+  decision above), `GET /api/events`, `GET /api/settings` + `PUT /api/settings/notify-enabled`
+  (`GetSettings` also returns `notify_configured`/`notify_provider`/`hue_bridge_host` — non-secret
+  config status the web app's Settings page shows; never credentials themselves), `GET /api/stream`
   (SSE — see real-time decision above), `GET /api/setup/status` + `POST /api/setup/pair` (the
   bridge-pairing flow — see the `HUE_APP_KEY`/pairing note above; `PostSetupPair` never returns the
-  key itself, same discipline as `GetSettings`).
+  key itself, same discipline as `GetSettings`), plus `POST /api/notify/test` + `POST /api/notify`
+  (`internal/handler/notify.go` — the standalone, always-reachable provider-configuration page's
+  API; see the `Notifier`/`NotifierStore` decisions above). `GetSetupStatus` stays bridge-only
+  (`{configured, hue_bridge_host}`) — it doesn't know or care about notifications at all, unlike an
+  earlier version of this design that coupled the two.
   `GetZones`/`GetRooms` use the `HueClient`-interface + mock pattern (mirroring `postr`'s
   `PlexClient`); the DB-backed handlers instead hold a concrete `*db.Queries` (plus `*config.Config`
   for the non-secret status fields, same as `postr`'s `Handler.config`, and `*stream.Hub` for
   `GetStream`) and are tested against a real `db.Open(":memory:")`, matching `postr`'s own
   handler-test convention (mock the network dependency, use the real DB for SQL correctness). The
-  setup endpoints instead take a `PairFunc` (a plain function type, not an interface — there's only
-  one operation) and a `context.CancelFunc` (`stop`), both stubbable in tests without any real HTTP
-  call to a bridge.
+  setup/notify endpoints take a `PairFunc` and a `NotifierFactory` (both plain function types, not
+  interfaces — no other bridge/provider-authenticated calls involved) and a `context.CancelFunc`
+  (`stop`, used only by the bridge-pairing endpoint — the notify endpoints hot-swap
+  `*NotifierStore` instead), all stubbable in tests without any real HTTP call.
 - `internal/watch` — matches eventstream data against `watched_resources` (see event matching
   note above). `ResolveResourceID` (the id-resolution half of `Match`, without the DB lookup) is
   exported and reused by `cmd/web` to broadcast raw resource updates for *unwatched* resources too.
   Depends on a narrow `Queries` interface, not `*db.Queries`, for mock testing.
 - `internal/stream` — the real-time pub/sub `Hub` (see decision above).
   `Change.Notify` carries the resource's own mute state through to the caller.
-- `internal/telegram` — `Client.Send(ctx, text)` posts to the Bot API's `sendMessage`, checking
-  the `{"ok":bool,"description":...}` envelope (the authoritative success signal, not just HTTP
-  status). White-box test file (`package telegram`, not `telegram_test`) overrides the unexported
-  `baseURL` to point at an `httptest` server — there's no public constructor param for it since
-  real callers never need anything but the real API.
+- `internal/telegram` — `Client.Send(ctx, resourceName string, on bool) error` (plus `SendTest`)
+  posts to the Bot API's `sendMessage`, checking the `{"ok":bool,"description":...}` envelope (the
+  authoritative success signal, not just HTTP status). Both implement `internal/handler.Notifier`.
+  White-box test file (`package telegram`, not `telegram_test`) overrides the unexported `baseURL`
+  to point at an `httptest` server — there's no public constructor param for it since real callers
+  never need anything but the real API.
+- `internal/discord` — `Client.Send`/`SendTest`, same `Notifier` shape as `internal/telegram`,
+  posting to a single incoming-webhook URL (no bot token/OAuth). Always sends
+  `"allowed_mentions": {"parse": []}` — Hue light/room names are user-renameable, and Discord
+  parses `@everyone`/role mentions out of plain content regardless of markdown escaping, so this is
+  the standard fix, not optional hardening. No `baseURL` test seam needed (unlike Telegram): the
+  webhook URL *is* the whole endpoint, so its test file is plain black-box `discord_test`.
 - `internal/config` — env-based config loading/validation.
 - `internal/db` — SQLite access: `migrations/` (goose), `queries/` (sqlc input), most of the rest
   is sqlc-generated except `helpers.go` (hand-written companion functions on `*Queries`, e.g.
@@ -249,12 +280,25 @@ files found`) on a fresh clone that never had a build run. Bit this project twic
 
 Backend is functionally complete end-to-end for its core loop: Hue CLIP v2 client (REST + SSE) in
 `internal/hue`, resource grouping (`internal/catalog`), event matching against `watched_resources`
-(`internal/watch`, `Change.Notify`-aware), a Telegram sender (`internal/telegram`), env config
-including Telegram credentials (`internal/config`), SQLite/goose/sqlc (`internal/db`, tables:
-`watched_resources`, `events`, `settings`), and a full HTTP API (`internal/handler`).
+(`internal/watch`, `Change.Notify`-aware), pluggable notification senders (`internal/telegram`,
+`internal/discord`, both implementing `internal/handler.Notifier`), env config including provider
+credentials (`internal/config`), SQLite/goose/sqlc (`internal/db`, tables: `watched_resources`,
+`events`, `settings`), and a full HTTP API (`internal/handler`).
 `cmd/web` wires all of it and also serves the built frontend (`internal/web`) — the event loop
-records every watched change to `events` (with a fixed `outcome`) and sends a Telegram message
-unless muted, channel-disabled, or unconfigured.
+records every watched change to `events` (with a fixed `outcome`) and sends a notification through
+whichever provider is active in `*handler.NotifierStore`, unless muted, channel-disabled, or
+unconfigured.
+
+Multi-provider notifications: `HUE_APP_KEY`-style env-or-DB resolution now also applies to the
+notification provider — `cmd/web`'s `resolveNotifyConfig` prefers env (`TELEGRAM_BOT_TOKEN`/
+`TELEGRAM_CHAT_ID` or `DISCORD_WEBHOOK_URL`), falling back to whatever `/provider` stored under
+`db.NotifyProviderKey` + its per-provider credential keys. `buildNotifier` (in `cmd/web/main.go`)
+doubles as both that boot-time constructor and the `handler.NotifierFactory` wired into the
+handler, so adding a third provider means one new `case` there plus a new client package, nothing
+else. Unlike the Hue key, saving/changing the notify provider never restarts the process — see
+`NotifierStore`'s doc comment for why hot-swapping is safe here (no persistent connection, unlike
+the Hue SSE client) — `POST /api/notify` calls `h.notifierStore.Set(...)` and returns `204`
+immediately.
 
 `HUE_APP_KEY` is now optional at the env layer (`internal/config`'s `validate()` no longer
 requires it) — `cmd/web` resolves the effective key from the env var first, falling back to a
@@ -272,11 +316,28 @@ frontend router (`main.ts`) gates every route behind a `beforeEach` guard checki
 status once per session, redirecting `/ → /setup` and back. The old manual curl-based workaround
 is kept in the README as a documented fallback (headless/scripted setups).
 
+Notification provider setup is **not** part of that wizard — it's a standalone `NotifyProviderPage.vue`
+at `/provider`, reachable any time once the bridge is paired (not gated by the router guard the
+way `/setup` is), linked from `SetupPage.vue`'s post-pairing "Next" button and from a
+"Configure"/"Change" button in `SettingsSection.vue`. This is deliberately simpler than an earlier
+version of this design that tried to gate a notify "step" behind `/setup` with a
+`notify_setup_skipped` DB flag and a split `hue_configured`/`notify_decided` status: since the
+notifier is hot-swappable (see above), there's no restart to synchronize around and no reason to
+force a one-time decision — `/provider` is just an always-available settings page. The picker uses
+`SegmentedControl.vue` (extended with an optional per-option `icon`) showing real brand marks
+(`i-telegram-logo`/`i-discord-logo` in `IconSprite.vue`, sourced from svgrepo.com, own baked-in
+colors rather than `currentColor` — kept distinct from the existing tinted `i-telegram`/`i-discord`
+symbols still used in colored-tile contexts like `TopBar.vue`/`SettingsSection.vue`, where a
+same-color icon-on-background would be invisible). The Save button only renders (not just
+disables) once `POST /api/notify/test` has succeeded, and any credential edit afterward resets
+that state — a stale "test succeeded" must not silently apply to a since-changed value.
+
 The web app (`web/`) has a working dashboard: live stats, watched-resources grid (3 layouts, mute/
 unwatch), browse zones/rooms with watch toggles (long lists cap at a fixed height and scroll —
 `ScrollableList.vue`, reused across panels via an `itemsDisplayed` prop), history with filters
 (absolute date/time shown past 24h instead of an ever-growing "Nd ago"), and a settings panel
-(Telegram on/off + non-secret config status) — all updating in real time over `/api/stream` (SSE),
+(notification on/off + non-secret config status, provider-aware label/icon/color) — all updating
+in real time over `/api/stream` (SSE),
 not just on page load. Light AND room/zone icons are archetype-driven: `catalog.Group`/`Light` both
 carry the bridge's `metadata.archetype`, mapped in `resourceIcon.ts` to SVG sprite symbols
 (`i-hue-*` in `IconSprite.vue`, sourced from `arallsopp/hass-hue-icons`, CC BY-NC-SA — fine for this
@@ -288,8 +349,9 @@ spinner (`i-spinner`, `animate-spin`), not a skeleton placeholder. Favicon + `do
 mirror the header logo, now used in the root `README.md`. Verified end-to-end against the real
 compiled binary (fake bridge, real SQLite) — build/typecheck/lint/tests all green on both sides.
 Not yet built/verified: real interaction against a live Hue bridge + a real Telegram bot in a
-browser (including the new `/setup` pairing flow against a real bridge's physical button), and any
-UI polish pass beyond the initial mockup translation.
+browser (including the `/setup` pairing flow against a real bridge's physical button), a real
+Discord webhook actually receiving a correctly-formatted, non-pinging message, and any UI polish
+pass beyond the initial mockup translation.
 
 Also since the last update: `cmd/web` no longer exits at startup if the bridge is unreachable
 (that fully defeated the point of live bridge-status tracking — an unreachable bridge should show

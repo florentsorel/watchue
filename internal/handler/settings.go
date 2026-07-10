@@ -8,36 +8,43 @@ import (
 )
 
 type settingsResponse struct {
-	TelegramEnabled    bool   `json:"telegram_enabled"`
-	TelegramConfigured bool   `json:"telegram_configured"`
-	HueBridgeHost      string `json:"hue_bridge_host"`
-	BridgeOnline       bool   `json:"bridge_online"`
-	Version            string `json:"version"`
+	NotifyEnabled    bool   `json:"notify_enabled"`
+	NotifyConfigured bool   `json:"notify_configured"`
+	NotifyProvider   string `json:"notify_provider"`
+	HueBridgeHost    string `json:"hue_bridge_host"`
+	BridgeOnline     bool   `json:"bridge_online"`
+	Version          string `json:"version"`
 }
 
-// GetSettings returns the current notification-channel toggles plus
-// non-secret config status (never the bot token/chat id themselves).
+// GetSettings returns the current notification-channel toggle plus
+// non-secret config status (never credentials themselves).
 func (h *Handler) GetSettings(c *echo.Context) error {
-	enabled, err := h.db.GetBoolSetting(c.Request().Context(), db.TelegramEnabledKey, true)
+	ctx := c.Request().Context()
+	enabled, err := h.db.GetBoolSetting(ctx, db.NotifyEnabledKey, true)
+	if err != nil {
+		return jsonInternalError(c, err)
+	}
+	provider, err := h.notifyProvider(ctx)
 	if err != nil {
 		return jsonInternalError(c, err)
 	}
 	return c.JSON(http.StatusOK, settingsResponse{
-		TelegramEnabled:    enabled,
-		TelegramConfigured: h.cfg.TelegramBotToken != "",
-		HueBridgeHost:      h.cfg.HueBridgeHost,
-		BridgeOnline:       h.bridgeOnline.Load(),
-		Version:            h.version,
+		NotifyEnabled:    enabled,
+		NotifyConfigured: provider != "",
+		NotifyProvider:   provider,
+		HueBridgeHost:    h.cfg.HueBridgeHost,
+		BridgeOnline:     h.bridgeOnline.Load(),
+		Version:          h.version,
 	})
 }
 
-type putTelegramEnabledRequest struct {
+type putNotifyEnabledRequest struct {
 	Enabled *bool `json:"enabled"`
 }
 
-// PutTelegramEnabled turns the Telegram notification channel on or off.
-func (h *Handler) PutTelegramEnabled(c *echo.Context) error {
-	var req putTelegramEnabledRequest
+// PutNotifyEnabled turns the active notification channel on or off.
+func (h *Handler) PutNotifyEnabled(c *echo.Context) error {
+	var req putNotifyEnabledRequest
 	if err := c.Bind(&req); err != nil {
 		return jsonError(c, http.StatusBadRequest, "invalid request body")
 	}
@@ -45,7 +52,7 @@ func (h *Handler) PutTelegramEnabled(c *echo.Context) error {
 		return jsonError(c, http.StatusBadRequest, "enabled is required")
 	}
 
-	if err := h.db.SetBoolSetting(c.Request().Context(), db.TelegramEnabledKey, *req.Enabled); err != nil {
+	if err := h.db.SetBoolSetting(c.Request().Context(), db.NotifyEnabledKey, *req.Enabled); err != nil {
 		return jsonInternalError(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)

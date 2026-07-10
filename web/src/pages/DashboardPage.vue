@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from "vue"
+import { onActivated } from "vue"
 import TopBar from "@/components/TopBar.vue"
 import AppIcon from "@/components/AppIcon.vue"
 import StatsHero from "@/components/StatsHero.vue"
@@ -42,7 +42,9 @@ const settingsStore = useSettingsStore()
 
 useEventStream()
 
-onMounted(() => {
+// onActivated, not onMounted: App.vue wraps every route in <KeepAlive>, so
+// onMounted would only fire once and miss changes made elsewhere (e.g. /provider).
+onActivated(() => {
   bridgeStore.load()
   watchedStore.load()
   eventsStore.load()

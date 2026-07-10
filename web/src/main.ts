@@ -5,6 +5,7 @@ import { createRouter, createWebHistory } from "vue-router"
 import App from "./App.vue"
 import DashboardPage from "./pages/DashboardPage.vue"
 import SetupPage from "./pages/SetupPage.vue"
+import NotifyProviderPage from "./pages/NotifyProviderPage.vue"
 import { useSetupStore } from "./stores/useSetupStore"
 import { useUiStore } from "./stores/useUiStore"
 
@@ -20,6 +21,7 @@ const router = createRouter({
   routes: [
     { path: "/", component: DashboardPage },
     { path: "/setup", component: SetupPage },
+    { path: "/provider", component: NotifyProviderPage },
   ],
 })
 
