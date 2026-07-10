@@ -113,7 +113,7 @@ func TestPutTelegramEnabled(t *testing.T) {
 		t.Error("TelegramEnabled = true, want false after disabling")
 	}
 
-	rec, c = newCtx(t, http.MethodPut, "/api/settings/telegram-enabled", `{"enabled":true}`)
+	_, c = newCtx(t, http.MethodPut, "/api/settings/telegram-enabled", `{"enabled":true}`)
 	if err := h.PutTelegramEnabled(c); err != nil {
 		t.Fatalf("PutTelegramEnabled (re-enable): %v", err)
 	}

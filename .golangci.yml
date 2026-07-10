@@ -1,0 +1,16 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - (*os.File).Close
+        - (io.ReadCloser).Close
+        - (net/http.ResponseWriter).Write
+        - (*net/http.ResponseController).Flush
+        - (*encoding/json.Encoder).Encode
+        - fmt.Fprintf
+        - fmt.Fprint
+        - (mime/multipart.File).Close

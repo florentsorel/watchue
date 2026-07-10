@@ -57,7 +57,7 @@ func TestWatchedResourcesCRUD(t *testing.T) {
 
 	// the bridge-side name changes; re-watching the same id refreshes the cache
 	zoneName = "Salon renamed"
-	rec, c = newCtx(t, http.MethodPut, "/api/watched/zone-1", "")
+	_, c = newCtx(t, http.MethodPut, "/api/watched/zone-1", "")
 	c.SetPathValues(echo.PathValues{{Name: "id", Value: "zone-1"}})
 	if err := h.PutWatched(c); err != nil {
 		t.Fatalf("PutWatched (refresh): %v", err)
@@ -127,13 +127,13 @@ func TestPatchWatched_TogglesNotify(t *testing.T) {
 	}
 	h, _ := newTestSetup(t, mock)
 
-	rec, c := newCtx(t, http.MethodPut, "/api/watched/zone-1", "")
+	_, c := newCtx(t, http.MethodPut, "/api/watched/zone-1", "")
 	c.SetPathValues(echo.PathValues{{Name: "id", Value: "zone-1"}})
 	if err := h.PutWatched(c); err != nil {
 		t.Fatalf("PutWatched: %v", err)
 	}
 
-	rec, c = newCtx(t, http.MethodPatch, "/api/watched/zone-1", `{"notify":false}`)
+	rec, c := newCtx(t, http.MethodPatch, "/api/watched/zone-1", `{"notify":false}`)
 	c.SetPathValues(echo.PathValues{{Name: "id", Value: "zone-1"}})
 	if err := h.PatchWatched(c); err != nil {
 		t.Fatalf("PatchWatched: %v", err)
@@ -151,7 +151,7 @@ func TestPatchWatched_TogglesNotify(t *testing.T) {
 		t.Fatalf("Notify = %v, want false after muting", got)
 	}
 
-	rec, c = newCtx(t, http.MethodPatch, "/api/watched/zone-1", `{"notify":true}`)
+	_, c = newCtx(t, http.MethodPatch, "/api/watched/zone-1", `{"notify":true}`)
 	c.SetPathValues(echo.PathValues{{Name: "id", Value: "zone-1"}})
 	if err := h.PatchWatched(c); err != nil {
 		t.Fatalf("PatchWatched (unmute): %v", err)

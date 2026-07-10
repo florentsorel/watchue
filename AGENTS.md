@@ -196,8 +196,12 @@ for the frontend:
 
 ## Backend (Go) — commands
 
-Run from the repo root. Scope to `./cmd/... ./internal/...`, not bare `./...` — the latter also
-walks `web/node_modules`.
+Run from the repo root. Scope every command to `./cmd/... ./internal/...`, not bare `./...` —
+the latter also walks `web/node_modules`, which for this project isn't just slower: one npm
+package in there (`flatted`) vendors actual `.go` files as a reference implementation, so an
+unscoped `golangci-lint run` reports real-looking `govet` issues against code that isn't ours at
+all (bit CI once already — `ci.yml`'s Go Lint step passes `./cmd/... ./internal/...` as `args` for
+exactly this reason, don't drop it).
 
 ```
 go build ./cmd/... ./internal/...
@@ -206,10 +210,28 @@ go test ./cmd/... ./internal/...
 go test ./internal/hue/... -run TestName -v   # single test
 go vet ./cmd/... ./internal/...
 gofmt -l cmd internal
+golangci-lint run --timeout=10m ./cmd/... ./internal/...
 make generate   # regenerate internal/db from queries/ + migrations/ (wraps `sqlc generate`)
 make build      # build/watchue
 make test
 ```
+
+`.golangci.yml` mirrors `postr`'s: `errcheck.exclude-functions` for the usual low-value
+"unchecked `Close`/`Flush`/`Write`/`Encode` on cleanup or in test handlers" noise, rather than
+`//nolint`-ing each call site individually. `go vet`/`go test` alone won't catch what
+`golangci-lint` catches (errcheck, staticcheck) — run it before trusting a "looks clean" backend
+change, it's the only one of the four that caught real (if minor) issues this project has actually
+had (two dead-store `rec = ...` reassignments in handler tests).
+
+**`internal/web/dist/.gitkeep` gotcha**: this file's whole job is to make `go:embed all:dist`
+compile on a fresh checkout, before `cd web && npm run build` has ever run. Vite's
+`emptyOutDir: true` wipes the *entire* `dist/` directory — `.gitkeep` included — on every build,
+so running `npm run build` locally deletes your only working copy of it. It's cheap to recreate
+(`touch internal/web/dist/.gitkeep`), but easy to forget to before committing, since a build you
+ran minutes earlier already silently deleted it and nothing local complains — the failure only
+shows up in CI (`golangci-lint`/`go test` both fail identically: `pattern all:dist: no matching
+files found`) on a fresh clone that never had a build run. Bit this project twice already — check
+`git status` for it specifically before trusting a build/test-clean PR that touched `web/`.
 
 ## Status
 
