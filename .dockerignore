@@ -1,0 +1,17 @@
+.git
+.github
+.claude
+build
+data
+docs
+web/node_modules
+web/dist
+internal/web/dist
+*.db
+*.db-*
+AGENTS.md
+CLAUDE.md
+README.md
+compose*.yml
+Dockerfile
+.dockerignore
