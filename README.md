@@ -8,7 +8,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/docker-ready-blue?logo=docker" alt="Docker ready" />
-  <img src="https://img.shields.io/badge/go-1.26.3-00ADD8?logo=go" alt="Go version" />
+  <img src="https://img.shields.io/badge/go-1.26.5-00ADD8?logo=go" alt="Go version" />
   <img src="https://img.shields.io/badge/vue-3-42b883?logo=vuedotjs" alt="Vue 3" />
 </p>
 
