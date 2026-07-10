@@ -1,0 +1,6 @@
+/build
+/data
+/internal/web/dist/*
+!/internal/web/dist/.gitkeep
+
+.DS_Store
