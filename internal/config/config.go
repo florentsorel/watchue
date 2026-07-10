@@ -8,7 +8,11 @@ import (
 
 type Config struct {
 	HueBridgeHost string `env:"HUE_BRIDGE_HOST"`
-	HueAppKey     string `env:"HUE_APP_KEY"`
+
+	// Optional: obtained once via the bridge's link-button pairing flow. If
+	// unset here, cmd/web falls back to a value stored in the settings table
+	// by the /setup pairing flow (see internal/hue.Pair).
+	HueAppKey string `env:"HUE_APP_KEY"`
 
 	// Optional; must be set together (see validate).
 	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN"`
@@ -31,9 +35,6 @@ func Load() (*Config, error) {
 func (c *Config) validate() error {
 	if c.HueBridgeHost == "" {
 		return errors.New("HUE_BRIDGE_HOST must be set")
-	}
-	if c.HueAppKey == "" {
-		return errors.New("HUE_APP_KEY must be set")
 	}
 	if (c.TelegramBotToken == "") != (c.TelegramChatID == "") {
 		return errors.New("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set together")

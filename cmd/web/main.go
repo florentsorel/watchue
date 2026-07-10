@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,10 +51,23 @@ func main() {
 	defer conn.Close()
 	queries := db.New(conn)
 
-	client := hue.NewClient(cfg.HueBridgeHost, cfg.HueAppKey, nil)
+	appKey := cfg.HueAppKey
+	if appKey == "" {
+		if v, err := queries.GetSetting(ctx, db.HueAppKeyKey); err == nil {
+			appKey = v
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			slog.Error("failed to read stored hue app key", "error", err)
+			os.Exit(1)
+		}
+	}
+	configured := appKey != ""
+
+	client := hue.NewClient(cfg.HueBridgeHost, appKey, nil)
 
 	bridgeOnline := &atomic.Bool{}
-	if zones, err := client.Zones(ctx); err != nil {
+	if !configured {
+		slog.Warn("Hue app key not configured — visit /setup to pair with the bridge", "host", cfg.HueBridgeHost)
+	} else if zones, err := client.Zones(ctx); err != nil {
 		slog.Warn("failed to reach bridge at startup — will keep retrying", "host", cfg.HueBridgeHost, "error", err)
 	} else {
 		slog.Info("connected to bridge", "host", cfg.HueBridgeHost, "zones", len(zones))
@@ -70,10 +84,15 @@ func main() {
 
 	hub := stream.NewHub()
 
-	go runEventLoop(ctx, client, queries, notifier, hub, bridgeOnline)
+	if configured {
+		go runEventLoop(ctx, client, queries, notifier, hub, bridgeOnline)
+	}
 
 	e := echo.New()
-	h := handler.New(client, queries, cfg, hub, bridgeOnline, version)
+	pair := func(ctx context.Context, bridgeAddr string) (string, error) { return hue.Pair(ctx, bridgeAddr, nil) }
+	h := handler.New(client, queries, cfg, hub, bridgeOnline, version, stop, pair)
+	e.GET("/api/setup/status", h.GetSetupStatus)
+	e.POST("/api/setup/pair", h.PostSetupPair)
 	e.GET("/api/zones", h.GetZones)
 	e.GET("/api/rooms", h.GetRooms)
 	e.GET("/api/watched", h.GetWatched)
