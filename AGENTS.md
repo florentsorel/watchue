@@ -57,6 +57,12 @@ Key decisions made for this architecture (don't relitigate without reason):
   `compose.yml` itself is intentionally not committed — documented inline in the README's Quick
   Start instead, same as `postr`. Supersedes an earlier plain-binary-via-systemd-in-LXC plan
   (no reason beyond "hadn't set up CI yet" — don't relitigate without one).
+- **GitHub Release on tag push**: a `release` job in `docker.yml` (`needs: build`, gated on
+  `refs/tags/v*`) runs `gh release create --generate-notes` — GitHub's native PR-based changelog,
+  no extra dependency beyond the `gh` CLI already on GitHub-hosted runners. `.github/release.yml`
+  groups it into "Dependencies" (Renovate PRs, which already carry a `dependencies` label) vs.
+  "Other Changes" (everything else). Requires `permissions: contents: write` on that job only —
+  the `build` job stays read-only aside from `packages: write` for the image push.
 - **Version display (footer)**: no package.json-bump PR, deliberately — that's exactly the release
   pattern the tag-push flow above was chosen to avoid. Instead `docker.yml` passes the tag resolved
   by `docker/metadata-action` (`steps.meta.outputs.version`) as a Docker build arg, which the
