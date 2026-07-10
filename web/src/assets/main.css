@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+:root {
+  --wq-bg: #efece6;
+  --wq-panel: #fffdfa;
+  --wq-panel-2: #f6f2ea;
+  --wq-border: #e6e0d4;
+  --wq-border-2: #efeadf;
+  --wq-text: #1d1a15;
+  --wq-muted: #726c60;
+  --wq-faint: #a49d8f;
+  --wq-accent: #f59e0b;
+  --wq-accent-2: #e8890a;
+  --wq-good: #3aa66a;
+  --wq-good-soft: rgb(58 166 106 / 12%);
+  --wq-tg: #2aabee;
+  --wq-tg-soft: color-mix(in srgb, #2aabee 13%, transparent);
+}
+
+.dark {
+  --wq-bg: #0b0d11;
+  --wq-panel: #14181f;
+  --wq-panel-2: #1b2029;
+  --wq-border: #252c37;
+  --wq-border-2: #1f2530;
+  --wq-text: #eef1f4;
+  --wq-muted: #98a1ad;
+  --wq-faint: #5c6470;
+  --wq-accent: #fbbf24;
+  --wq-accent-2: #f59e0b;
+  --wq-good: #4cc987;
+  --wq-good-soft: rgb(76 201 135 / 14%);
+}
+
+/* Registered via @theme so Tailwind generates utilities (bg-wq-panel,
+   text-wq-muted, border-wq-border, ...) whose values track the CSS custom
+   properties above — including the .dark overrides — at runtime. */
+@theme static {
+  --color-wq-bg: var(--wq-bg);
+  --color-wq-panel: var(--wq-panel);
+  --color-wq-panel-2: var(--wq-panel-2);
+  --color-wq-border: var(--wq-border);
+  --color-wq-border-2: var(--wq-border-2);
+  --color-wq-text: var(--wq-text);
+  --color-wq-muted: var(--wq-muted);
+  --color-wq-faint: var(--wq-faint);
+  --color-wq-accent: var(--wq-accent);
+  --color-wq-accent-2: var(--wq-accent-2);
+  --color-wq-good: var(--wq-good);
+  --color-wq-tg: var(--wq-tg);
+
+  /* Pixel-perfect values translated from the design mockup — named instead of
+     inline arbitrary values so the scale is greppable and reusable. Every
+     custom key is `wq`-prefixed to guarantee no collision with Tailwind's own
+     default scales (several of these numbers — 3, 7, 9, 11, 20 — are also
+     valid default spacing keys with a different meaning). */
+  --text-wq-10: 10px;
+  --text-wq-10-5: 10.5px;
+  --text-wq-11: 11px;
+  --text-wq-11-5: 11.5px;
+  --text-wq-12-5: 12.5px;
+  --text-wq-13: 13px;
+  --text-wq-13-5: 13.5px;
+  --text-wq-15: 15px;
+  --text-wq-17: 17px;
+  --text-wq-19: 19px;
+  --text-wq-26: 26px;
+  --text-wq-40: 40px;
+
+  --tracking-wq-wide: 0.14em;
+
+  --radius-wq-3: 3px;
+  --radius-wq-7: 7px;
+  --radius-wq-9: 9px;
+  --radius-wq-10: 10px;
+  --radius-wq-11: 11px;
+  --radius-wq-13: 13px;
+
+  --spacing-wq-1-5: 1.5px;
+  --spacing-wq-3: 3px;
+  --spacing-wq-7: 7px;
+  --spacing-wq-9: 9px;
+  --spacing-wq-11: 11px;
+  --spacing-wq-13: 13px;
+  --spacing-wq-15: 15px;
+  --spacing-wq-17: 17px;
+  --spacing-wq-18: 18px;
+  --spacing-wq-20: 20px;
+  --spacing-wq-22: 22px;
+  --spacing-wq-26: 26px;
+  --spacing-wq-30: 30px;
+  --spacing-wq-34: 34px;
+  --spacing-wq-38: 38px;
+  --spacing-wq-42: 42px;
+  --spacing-wq-46: 46px;
+  --spacing-wq-74: 74px;
+  --spacing-wq-120: 120px;
+
+  --shadow-wq-logo: 0 6px 18px -6px var(--wq-accent);
+  --shadow-wq-telegram: 0 8px 20px -8px var(--wq-tg);
+  --shadow-wq-status-ring: 0 0 0 3px var(--wq-good-soft);
+
+  --grid-template-columns-wq-stats: 1.5fr 1fr 1fr;
+  --grid-template-columns-wq-settings: 1.3fr 1fr;
+
+  --max-width-wq-container: 1140px;
+  --max-width-wq-44ch: 44ch;
+  --max-width-wq-52ch: 52ch;
+}
+
+.rounded-inherit {
+  border-radius: inherit;
+}
+
+body {
+  background: var(--wq-bg);
+  color: var(--wq-text);
+  font-feature-settings: "cv11";
+}
+
+.font-mono-ui {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+/* Shared surface style for every card/panel (stat tiles, resource cards,
+   bridge panels, history list, settings panel) — factored out because nearly
+   every section uses it, unlike other one-off utility combinations. */
+.wq-card {
+  background: var(--wq-panel);
+  border: 1px solid var(--wq-border);
+  border-radius: 1rem;
+  box-shadow:
+    0 1px 2px rgb(40 34 20 / 5%),
+    0 8px 24px -12px rgb(40 34 20 / 14%);
+}
+.dark .wq-card {
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 40%),
+    0 12px 32px -16px rgb(0 0 0 / 70%);
+}
