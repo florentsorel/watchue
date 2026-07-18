@@ -32,7 +32,7 @@ import (
 var version = "dev"
 
 func main() {
-	slog.SetDefault(slog.New(tint.NewHandler(os.Stdout, nil)))
+	slog.SetDefault(slog.New(tint.NewTextHandler(os.Stdout, nil)))
 
 	cfg, err := config.Load()
 	if err != nil {
