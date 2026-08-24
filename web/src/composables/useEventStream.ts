@@ -2,6 +2,7 @@ import { onMounted, onUnmounted } from "vue"
 import { useBridgeStore } from "@/stores/useBridgeStore"
 import { useEventsStore, type WatchEvent } from "@/stores/useEventsStore"
 import { useSettingsStore } from "@/stores/useSettingsStore"
+import { useStatsStore } from "@/stores/useStatsStore"
 
 interface ResourceMessage {
   kind: "resource"
@@ -27,6 +28,7 @@ export function useEventStream() {
   const bridgeStore = useBridgeStore()
   const eventsStore = useEventsStore()
   const settingsStore = useSettingsStore()
+  const statsStore = useStatsStore()
 
   let source: EventSource | null = null
 
@@ -41,6 +43,10 @@ export function useEventStream() {
       bridgeStore.applyOnUpdate(msg.id, msg.on)
     } else if (msg.kind === "event") {
       eventsStore.prepend(msg)
+      // A change closes or opens a session, which every chart is derived from.
+      // Refetched rather than patched in: the new event alone doesn't say which
+      // session it ended, and the payload is small.
+      if (statsStore.loaded) statsStore.load()
     } else if (msg.kind === "bridge_status") {
       settingsStore.bridgeOnline = msg.online
     }

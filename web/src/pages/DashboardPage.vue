@@ -6,6 +6,7 @@
         <StatsHero />
       </div>
       <WatchedResourcesSection />
+      <InsightsSection />
       <BrowseBridgeSection />
       <HistorySection />
       <SettingsSection />
@@ -26,18 +27,21 @@ import TopBar from "@/components/TopBar.vue"
 import AppIcon from "@/components/AppIcon.vue"
 import StatsHero from "@/components/StatsHero.vue"
 import WatchedResourcesSection from "@/components/WatchedResourcesSection.vue"
+import InsightsSection from "@/components/InsightsSection.vue"
 import BrowseBridgeSection from "@/components/BrowseBridgeSection.vue"
 import HistorySection from "@/components/HistorySection.vue"
 import SettingsSection from "@/components/SettingsSection.vue"
 import { useBridgeStore } from "@/stores/useBridgeStore"
 import { useWatchedStore } from "@/stores/useWatchedStore"
 import { useEventsStore } from "@/stores/useEventsStore"
+import { useStatsStore } from "@/stores/useStatsStore"
 import { useSettingsStore } from "@/stores/useSettingsStore"
 import { useEventStream } from "@/composables/useEventStream"
 
 const bridgeStore = useBridgeStore()
 const watchedStore = useWatchedStore()
 const eventsStore = useEventsStore()
+const statsStore = useStatsStore()
 const settingsStore = useSettingsStore()
 
 useEventStream()
@@ -48,6 +52,7 @@ onActivated(() => {
   bridgeStore.load()
   watchedStore.load()
   eventsStore.load()
+  statsStore.load()
   settingsStore.load()
 })
 </script>

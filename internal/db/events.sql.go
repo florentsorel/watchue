@@ -81,3 +81,70 @@ func (q *Queries) ListEvents(ctx context.Context, limit int64) ([]Event, error) 
 	}
 	return items, nil
 }
+
+const listSessionsSince = `-- name: ListSessionsSince :many
+SELECT e.resource_id,
+       e.resource_type,
+       e.name,
+       e.created_at AS start_at,
+       CAST(COALESCE((SELECT o.created_at
+                   FROM events o
+                  WHERE o.resource_id = e.resource_id AND o.on_state = 0 AND o.id > e.id
+                  ORDER BY o.id
+                  LIMIT 1), '') AS TEXT) AS end_at
+FROM events e
+WHERE e.on_state = 1
+  AND NOT EXISTS (SELECT 1
+                    FROM events o
+                   WHERE o.resource_id = e.resource_id
+                     AND o.on_state = 0
+                     AND o.id > e.id
+                     AND o.created_at < ?)
+ORDER BY e.created_at
+`
+
+type ListSessionsSinceRow struct {
+	ResourceID   string
+	ResourceType string
+	Name         string
+	StartAt      string
+	EndAt        string
+}
+
+// Every "on" period: a turn-on paired with the first turn-off that follows it
+// for the same resource. end_at is the empty string while the resource is
+// still on: the correlated subquery yields NULL there, and sqlc types a
+// subquery column as non-null TEXT; COALESCE keeps the scan from failing and
+// the CAST keeps sqlc typing the column as string rather than interface{}.
+// The NOT EXISTS keeps any session that overlaps the window rather than only
+// those starting inside it, so a light switched on before `from` and off after
+// it still counts; the caller clips the overhang to its own window. Ordering on
+// id, not created_at, since CURRENT_TIMESTAMP only resolves to the second.
+func (q *Queries) ListSessionsSince(ctx context.Context, createdAt string) ([]ListSessionsSinceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionsSince, createdAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSessionsSinceRow
+	for rows.Next() {
+		var i ListSessionsSinceRow
+		if err := rows.Scan(
+			&i.ResourceID,
+			&i.ResourceType,
+			&i.Name,
+			&i.StartAt,
+			&i.EndAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
