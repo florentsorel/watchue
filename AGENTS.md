@@ -119,6 +119,26 @@ Key decisions made for this architecture (don't relitigate without reason):
   lights too) and an `event` message only when a watched change gets recorded. A slow/stalled
   subscriber has messages dropped rather than blocking the publisher (bounded channel + non-blocking
   send) — broadcasting must never stall the event loop that also handles Telegram/history.
+- **Charts are fed raw intervals, not pre-binned counts** (`GET /api/stats`): bucketing by day or
+  hour is only correct in the viewer's own timezone — DST included — and only the browser knows it,
+  so the endpoint returns the "on" periods themselves and `web/src/utils/insights.ts` derives every
+  series from them. That also keeps a single SQL query behind all five charts. `ListSessionsSince`
+  pairs each turn-on with the first turn-off that follows it *for the same resource* via a
+  correlated subquery rather than a `LEAD()` window function — sqlc's SQLite parser can't resolve a
+  window alias through a CTE (`column "end_at" does not exist`), and the subquery form is the more
+  honest semantics anyway. Two filters that look optional but aren't: a session overlapping the
+  window start is kept whole (else a light switched on before the range vanishes from it), and an
+  open session belonging to a resource that is no longer watched is dropped in the handler — its
+  real turn-off happened after we stopped listening, so counting it as "on ever since" swamps every
+  duration on the page. Hit for real: an unwatched `Salon` read as lit for 45 days.
+- **Chart.js (+ `vue-chartjs`) for plotted charts, hand-built CSS for the rest**: ~70KB gzip, and
+  the weekly heatmap is a plain `grid-cols-wq-hours` of colored cells — a matrix plugin would cost
+  more than the markup it replaces. The chart palette lives in `main.css` as its own
+  `--wq-chart-*` / `--wq-series-*` / `--wq-heat-*` tokens rather than reusing the UI ones:
+  `--wq-accent` only reaches 2.1:1 against `--wq-panel`, well under the 3:1 a mark needs. Every
+  step was checked against a lightness band, a chroma floor, color-blind separation and contrast in
+  **both** themes — **don't hand-tweak them**, and note the three-slot series cap is a result of
+  that check, not an arbitrary limit (no fourth hue clears separation against the other three).
 
 ## Repository layout
 
@@ -143,7 +163,9 @@ for the frontend:
   requirement) whereas zone membership is a partial/optional subset.
 - `internal/handler` — Echo v5 HTTP handlers: `GET /api/zones`, `GET /api/rooms`,
   `GET|PUT|PATCH|DELETE /api/watched(/:id)` (`PATCH` toggles `notify` only — see the two-switches
-  decision above), `GET /api/events`, `GET /api/settings` + `PUT /api/settings/notify-enabled`
+  decision above), `GET /api/events`, `GET /api/stats` (`internal/handler/stats.go` — the "on"
+  periods the dashboard's charts are derived from; see the raw-intervals decision above),
+  `GET /api/settings` + `PUT /api/settings/notify-enabled`
   (`GetSettings` also returns `notify_configured`/`notify_provider`/`hue_bridge_host` — non-secret
   config status the web app's Settings page shows; never credentials themselves), `GET /api/stream`
   (SSE — see real-time decision above), `GET /api/setup/status` + `POST /api/setup/pair` (the
@@ -224,6 +246,13 @@ for the frontend:
   - No API client layer — raw `fetch()` in Pinia stores (`src/stores/`, setup-store syntax),
     matching `postr`'s convention exactly (no `api/`/`client.ts`, no shared response DTOs — each
     store declares the small interface it needs).
+  - Chart derivation lives in `src/utils/insights.ts` — pure functions over the sessions
+    `/api/stats` returns (day/week buckets, weekly heatmap, per-resource totals, one point per
+    night), unit-tested without mounting anything, so the `.vue` files stay thin wrappers around
+    Chart.js config. All of it works in local midnights via `new Date(y, m, d + n)` rather than
+    `+ n * 86400000`: DST days are 23 or 25 hours long, so fixed spans drift off midnight twice a
+    year. `useChartTheme.ts` re-reads the palette from the CSS custom properties on every theme
+    change — canvas needs literal color strings and can't follow a `var()` the way the DOM does.
   - `src/components/` flat (not nested by feature), `src/pages/` for route-level components
     (`DashboardPage.vue` and `SetupPage.vue`), routes declared inline in `main.ts` (no `router/`
     folder) — matching `postr`. `main.ts` also holds a `router.beforeEach` guard (the one place
@@ -385,3 +414,19 @@ Deployment is now Docker-based (see the Deployment decision above): `Dockerfile`
 `LICENSE.txt` (MIT) and `README.md` — mirroring `postr`'s conventions, including not committing a
 `compose.yml` (documented inline in the README instead). Not yet done: an actual `git tag` push to
 verify the release workflow end-to-end (no commits/remote on this repo yet).
+
+`InsightsSection.vue` on the dashboard adds five charts over `GET /api/stats`, all scoped by one
+range control (7d/30d/90d/1y) sitting above them: switch-ons vs switch-offs per day, time on per
+day, a weekly 7×24 heatmap, two per-resource small multiples (hours and change counts kept on
+separate axes — never one plot with two scales), and a `NightlySwitchChart.vue` plotting the day on
+X against the time of day on Y, one point per night joined into a curve. That last one exists to
+answer "when did someone actually turn the light off"; its columns run **noon to noon** by default
+(a `Night` / `Calendar day` toggle switches it) because a switch-off at 01:17 filed under the next
+calendar day plots *below* the previous night's 23:05, so the curve dips exactly where the answer
+is "later" — the whole point of the chart, inverted. Every chart has a table-view twin
+(`InsightsTable.vue`) so no value is reachable only by hovering.
+
+Not verified: none of the charts have been looked at in a browser — no visual pass on label
+collisions, card heights, or the heatmap in dark mode. `golangci-lint` also couldn't run locally
+(the installed binary is built with Go 1.26 and refuses a project targeting 1.27), so errcheck and
+staticcheck have not seen `internal/handler/stats.go`; CI is the first thing that will.

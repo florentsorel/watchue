@@ -114,6 +114,7 @@ func main() {
 	e.PATCH("/api/watched/:id", h.PatchWatched)
 	e.DELETE("/api/watched/:id", h.DeleteWatched)
 	e.GET("/api/events", h.GetEvents)
+	e.GET("/api/stats", h.GetStats)
 	e.GET("/api/settings", h.GetSettings)
 	e.PUT("/api/settings/notify-enabled", h.PutNotifyEnabled)
 	e.GET("/api/stream", h.GetStream)

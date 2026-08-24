@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -39,6 +40,15 @@ func newTestSetupWithHub(t *testing.T, hueClient handler.HueClient, cfg *config.
 
 func newTestSetupWithBridgeOnline(t *testing.T, hueClient handler.HueClient, cfg *config.Config, hub *stream.Hub, bridgeOnline *atomic.Bool) (*handler.Handler, *db.Queries) {
 	t.Helper()
+	h, queries, _ := newTestSetupWithConn(t, hueClient, cfg, hub, bridgeOnline)
+	return h, queries
+}
+
+// newTestSetupWithConn also hands back the connection, for the rare test that
+// needs raw SQL rather than a generated query — backdating a seeded row, say,
+// since InsertEvent leaves created_at to CURRENT_TIMESTAMP.
+func newTestSetupWithConn(t *testing.T, hueClient handler.HueClient, cfg *config.Config, hub *stream.Hub, bridgeOnline *atomic.Bool) (*handler.Handler, *db.Queries, *sql.DB) {
+	t.Helper()
 	conn, err := db.Open(":memory:")
 	if err != nil {
 		t.Fatalf("db.Open: %v", err)
@@ -47,7 +57,7 @@ func newTestSetupWithBridgeOnline(t *testing.T, hueClient handler.HueClient, cfg
 	queries := db.New(conn)
 	noopPair := func(ctx context.Context, bridgeAddr string) (string, error) { return "", nil }
 	noopFactory := func(cfg handler.NotifyConfig) (handler.Notifier, error) { return &mockNotifier{}, nil }
-	return handler.New(hueClient, queries, cfg, hub, bridgeOnline, "test", func() {}, noopPair, noopFactory, handler.NewNotifierStore()), queries
+	return handler.New(hueClient, queries, cfg, hub, bridgeOnline, "test", func() {}, noopPair, noopFactory, handler.NewNotifierStore()), queries, conn
 }
 
 // newCtx creates an Echo context backed by a response recorder.

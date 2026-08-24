@@ -18,6 +18,32 @@
   --wq-discord: #5865f2;
   --wq-discord-soft: color-mix(in srgb, #5865f2 13%, transparent);
   --wq-info: #3b82f6;
+
+  /* Chart palette. Not reused from the tokens above: those are picked for UI
+     chrome, and the two series colors have to clear a color-blind separation
+     and a 3:1 contrast floor against the panel they sit on, which --wq-accent
+     (2.1:1 on --wq-panel) does not. Steps validated per mode with the dataviz
+     palette checker — don't hand-tweak them. */
+  --wq-chart-on: #d97706;
+  --wq-chart-off: #2563eb;
+
+  /* Series identity for the state timeline, where the colors mean "which
+     resource" rather than "on or off". The first two slots are the same hexes
+     as above — one validated set, used for both jobs. Three slots is the cap:
+     any two timeline lanes can be compared side by side, and no fourth hue
+     clears the color-blind separation against these three. */
+  --wq-series-1: var(--wq-chart-on);
+  --wq-series-2: var(--wq-chart-off);
+  --wq-series-3: #b5379a;
+
+  /* Sequential ramp for the weekly heatmap: one hue, light to dark, constant
+     OKLCH hue 58 with monotone lightness steps. The lightest step is already
+     mid-tone so it clears the surface; a zero cell uses --wq-panel-2 instead. */
+  --wq-heat-1: #f5a15e;
+  --wq-heat-2: #dd8b47;
+  --wq-heat-3: #c67630;
+  --wq-heat-4: #af6112;
+  --wq-heat-5: #944f04;
 }
 
 .dark {
@@ -34,6 +60,19 @@
   --wq-good: #4cc987;
   --wq-good-soft: rgb(76 201 135 / 14%);
   --wq-info: #60a5fa;
+
+  /* Dark mode re-steps rather than flipping: the ramp's anchor moves to the
+     dark surface, so the heat scale runs dark to light. */
+  --wq-chart-on: #d97706;
+  --wq-chart-off: #3b82f6;
+  --wq-series-1: var(--wq-chart-on);
+  --wq-series-2: var(--wq-chart-off);
+  --wq-series-3: #b5379a;
+  --wq-heat-1: #7c4102;
+  --wq-heat-2: #985100;
+  --wq-heat-3: #b26417;
+  --wq-heat-4: #c97933;
+  --wq-heat-5: #e18e4b;
 }
 
 /* Registered via @theme so Tailwind generates utilities (bg-wq-panel,
@@ -54,6 +93,8 @@
   --color-wq-info: var(--wq-info);
   --color-wq-tg: var(--wq-tg);
   --color-wq-discord: var(--wq-discord);
+  --color-wq-chart-on: var(--wq-chart-on);
+  --color-wq-chart-off: var(--wq-chart-off);
 
   /* Pixel-perfect values translated from the design mockup — named instead of
      inline arbitrary values so the scale is greppable and reusable. Every
@@ -101,6 +142,7 @@
   --spacing-wq-46: 46px;
   --spacing-wq-74: 74px;
   --spacing-wq-120: 120px;
+  --spacing-wq-220: 220px;
 
   --shadow-wq-logo: 0 6px 18px -6px var(--wq-accent);
   --shadow-wq-telegram: 0 8px 20px -8px var(--wq-tg);
@@ -109,6 +151,7 @@
 
   --grid-template-columns-wq-stats: 1.5fr 1fr 1fr;
   --grid-template-columns-wq-settings: 1.3fr 1fr;
+  --grid-template-columns-wq-hours: repeat(24, minmax(0, 1fr));
 
   --max-width-wq-container: 1140px;
   --max-width-wq-44ch: 44ch;
