@@ -22,7 +22,15 @@ import {
 import { useChartTheme } from "@/composables/useChartTheme"
 import { formatAnchoredHour, formatSwitchTooltip, type NightPoint } from "@/utils/insights"
 
-Chart.register(LineController, LineElement, PointElement, CategoryScale, LinearScale, Legend, Tooltip)
+Chart.register(
+  LineController,
+  LineElement,
+  PointElement,
+  CategoryScale,
+  LinearScale,
+  Legend,
+  Tooltip
+)
 
 export interface SwitchSeries {
   label: string

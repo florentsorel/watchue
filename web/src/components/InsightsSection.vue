@@ -14,7 +14,10 @@
       />
     </SectionHeading>
 
-    <div v-if="statsStore.loading && !statsStore.loaded" class="wq-card grid place-items-center py-wq-74">
+    <div
+      v-if="statsStore.loading && !statsStore.loaded"
+      class="wq-card grid place-items-center py-wq-74"
+    >
       <AppIcon name="spinner" :size="20" class="animate-spin text-wq-faint" />
     </div>
 
@@ -86,9 +89,11 @@
       <div class="mt-3.5">
         <InsightsCard
           title="When the lights go off"
-          :hint="anchorHour === 12
-            ? 'One column per night, from noon to noon. Each point is the last switch-off of that night — the higher it sits, the later it happened.'
-            : 'One column per calendar day. Each point is the last switch-off of that day.'"
+          :hint="
+            anchorHour === 12
+              ? 'One column per night, from noon to noon. Each point is the last switch-off of that night — the higher it sits, the later it happened.'
+              : 'One column per calendar day. Each point is the last switch-off of that day.'
+          "
         >
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
             <ResourcePicker
@@ -221,7 +226,8 @@ const heatmap = computed(() => weeklyHeatmap(statsStore.sessions, statsStore.day
 const resources = computed(() => perResource(statsStore.sessions, statsStore.days))
 const resourceLabels = computed(() => resources.value.map((r) => r.name))
 const resourceHint = computed(
-  () => `${resources.value.length} ${resources.value.length === 1 ? "resource" : "resources"} with recorded changes`
+  () =>
+    `${resources.value.length} ${resources.value.length === 1 ? "resource" : "resources"} with recorded changes`
 )
 // Nominal categories, so one hue for every bar: coloring each by its own value
 // would re-encode what the bar length already shows.

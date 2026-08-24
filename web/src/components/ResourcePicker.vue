@@ -45,7 +45,11 @@ function toggle(id: string): void {
   if (isSelected(id)) {
     // Never empty: an empty picker would leave the chart with nothing to draw
     // and no obvious way back.
-    if (props.modelValue.length > 1) emit("update:modelValue", props.modelValue.filter((v) => v !== id))
+    if (props.modelValue.length > 1)
+      emit(
+        "update:modelValue",
+        props.modelValue.filter((v) => v !== id)
+      )
     return
   }
   if (props.modelValue.length < props.max) emit("update:modelValue", [...props.modelValue, id])

@@ -143,7 +143,7 @@ export function weeklyHeatmap(sessions: Session[], days: number, now = Date.now(
   for (const s of sessions) {
     const iv = toInterval(s, now)
     const start = Math.max(iv.from, from)
-    for (let t = start; t < iv.to; ) {
+    for (let t = start; t < iv.to;) {
       const cursor = new Date(t)
       const bounds = hourBounds(cursor, cursor.getHours())
       onMs[(cursor.getDay() + 6) % 7][cursor.getHours()] += overlapMs(iv, bounds)
