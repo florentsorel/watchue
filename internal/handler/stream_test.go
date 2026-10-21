@@ -33,7 +33,10 @@ func TestGetStream_RelaysPublishedMessages(t *testing.T) {
 	cancel()
 
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Errorf("GetStream returned %v after its context was cancelled", err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("GetStream did not return after its context was cancelled")
 	}
