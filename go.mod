@@ -7,7 +7,7 @@ require (
 	github.com/labstack/echo/v5 v5.4.4
 	github.com/lmittmann/tint v1.2.1
 	github.com/pressly/goose/v3 v3.29.0
-	modernc.org/sqlite v1.61.0
+	modernc.org/sqlite v1.61.1
 )
 
 require (
